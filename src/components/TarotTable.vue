@@ -1,5 +1,6 @@
 <template>
-  <div class="tarot-container">
+  <div class="tarot-container" @contextmenu.prevent>
+    
     <header class="table-header">
       <div class="controls-row">
         <div class="selector-group">
@@ -28,64 +29,50 @@
       </div>
     </header>
 
-    <main class="table-surface" ref="tableSurfaceRef">
+    <main 
+      class="table-surface" 
+      @wheel="onWheel"
+      @pointerdown="onSurfacePointerDown"
+      @pointermove="onSurfacePointerMove"
+      @pointerup="onSurfacePointerUp"
+      @pointercancel="onSurfacePointerUp"
+    >
       
-      <div class="spread-layout" :class="`spread-${currentSpreadKey}`">
-        <div 
-          v-for="(position, index) in currentSpread.positions" 
-          :key="'slot-'+index" 
-          class="spread-slot" 
-          :data-slot-index="index"
-          :class="{'is-horizontal': currentSpreadKey === 'celticCross' && index === 1}"
-        >
-          <div class="slot-label">{{ position }}</div>
-          
-          <div 
-            v-if="activeSpreadCards[index]" 
-            class="card-scene" 
-            @pointerdown.stop="startDrag($event, index, 'spread')"
-            @click.stop="flipCard(activeSpreadCards[index])"
-          >
-            <div class="card-object" :class="{ 'is-flipped': activeSpreadCards[index].tapState > 0, 'is-rotated': activeSpreadCards[index].tapState === 2 }">
-              <div class="card-face card-back"><div class="back-design">✦</div></div>
-              <div class="card-face card-front image-front">
-                <img draggable="false" :src="getCardImage(activeSpreadCards[index].id)" class="tarot-art" @error="handleImageError($event, activeSpreadCards[index].id)"/>
+      <div class="canvas-layer" ref="canvasLayerRef" :style="{ transform: `scale(${zoomScale})` }">
+        
+        <div class="spread-layout" :class="`spread-${currentSpreadKey}`">
+          <div v-for="(position, index) in currentSpread.positions" :key="'slot-'+index" class="spread-slot" :data-slot-index="index" :class="{'is-horizontal': currentSpreadKey === 'celticCross' && index === 1}">
+            <div class="slot-label">{{ position }}</div>
+            <div v-if="activeSpreadCards[index]" class="card-scene" @pointerdown.stop="startDrag($event, index, 'spread')" @click.stop="flipCard(activeSpreadCards[index])">
+              <div class="card-object" :class="{ 'is-flipped': activeSpreadCards[index].tapState > 0, 'is-rotated': activeSpreadCards[index].tapState === 2 }">
+                <div class="card-face card-back"><div class="back-design">✦</div></div>
+                <div class="card-face card-front image-front">
+                  <img draggable="false" :src="getCardImage(activeSpreadCards[index].id)" class="tarot-art" @error="handleImageError($event, activeSpreadCards[index].id)"/>
+                </div>
               </div>
             </div>
-          </div>
-          <div v-else class="slot-placeholder"></div>
-        </div>
-      </div>
-
-      <div 
-        v-for="(looseCard, index) in looseCards" 
-        :key="'loose-'+looseCard.id"
-        class="card-scene loose-card"
-        :style="{ left: looseCard.x + 'px', top: looseCard.y + 'px', zIndex: 100 + index }"
-        @pointerdown.stop="startDrag($event, index, 'loose')"
-        @click.stop="flipCard(looseCard)"
-      >
-        <div class="card-object" :class="{ 'is-flipped': looseCard.tapState > 0, 'is-rotated': looseCard.tapState === 2 }">
-          <div class="card-face card-back"><div class="back-design">✦</div></div>
-          <div class="card-face card-front image-front">
-             <img draggable="false" :src="getCardImage(looseCard.id)" class="tarot-art" @error="handleImageError($event, looseCard.id)"/>
+            <div v-else class="slot-placeholder"></div>
           </div>
         </div>
-      </div>
 
-      <div class="deck-area">
+        <div v-for="(looseCard, index) in looseCards" :key="'loose-'+looseCard.id" class="card-scene loose-card" :style="{ left: looseCard.x + 'px', top: looseCard.y + 'px', zIndex: 100 + index }" @pointerdown.stop="startDrag($event, index, 'loose')" @click.stop="flipCard(looseCard)">
+          <div class="card-object" :class="{ 'is-flipped': looseCard.tapState > 0, 'is-rotated': looseCard.tapState === 2 }">
+            <div class="card-face card-back"><div class="back-design">✦</div></div>
+            <div class="card-face card-front image-front">
+               <img draggable="false" :src="getCardImage(looseCard.id)" class="tarot-art" @error="handleImageError($event, looseCard.id)"/>
+            </div>
+          </div>
+        </div>
+
+      </div> <div class="deck-area">
+        <div class="zoom-indicator">{{ Math.round(zoomScale * 100) }}%</div>
+        
         <button class="btn btn-secondary btn-sm fan-toggle" @click="isFanned = !isFanned">
           {{ isFanned ? 'Stack Deck' : 'Fan Deck' }}
         </button>
 
         <div class="deck-container" :class="{ 'is-fanned': isFanned }" @pointerdown="handleDeckPointer">
-          <div 
-            v-for="(card, index) in deckPool" 
-            :key="card.id"
-            class="card-scene deck-card"
-            :style="getDeckCardStyle(card, index)"
-            @pointerdown.stop="startDrag($event, index, 'deck')"
-          >
+          <div v-for="(card, index) in deckPool" :key="card.id" class="card-scene deck-card" :style="getDeckCardStyle(card, index)" @pointerdown.stop="startDrag($event, index, 'deck')">
             <div class="card-object">
               <div class="card-face card-back"><div class="back-design">✦</div></div>
             </div>
@@ -94,6 +81,7 @@
         </div>
         <div class="deck-label">Remaining: {{ deckPool.length }}</div>
       </div>
+
     </main>
     
     <div v-if="drag.isActive && drag.cardData" class="drag-ghost" :style="ghostStyle">
@@ -106,6 +94,7 @@
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
@@ -124,18 +113,13 @@ const majorArcana = Array.from({ length: 22 }, (_, i) => ({
   name: `Archetype ${i}`
 }));
 
-// Added "free" spread
 const spreads = {
   free: { name: 'Free Spread (Sandbox)', positions: [] },
   single: { name: 'Single Focus', positions: ['Insight'] },
   threeCard: { name: 'Three Fates', positions: ['Past', 'Present', 'Future'] },
-  celticCross: { 
-    name: 'Celtic Cross', 
-    positions: ['1. The Heart', '2. The Challenge', '3. The Root', '4. The Past', '5. The Crown', '6. The Future', '7. The Self', '8. Environment', '9. Hopes/Fears', '10. Outcome'] 
-  }
+  celticCross: { name: 'Celtic Cross', positions: ['1. The Heart', '2. The Challenge', '3. The Root', '4. The Past', '5. The Crown', '6. The Future', '7. The Self', '8. Environment', '9. Hopes/Fears', '10. Outcome'] }
 };
 
-// Defaulted to free spread
 const currentSpreadKey = ref('free');
 const currentSpread = computed(() => spreads[currentSpreadKey.value]);
 
@@ -145,8 +129,55 @@ const looseCards = ref([]);
 const isShuffling = ref(false);
 const isFanned = ref(false);
 
-const tableSurfaceRef = ref(null);
 const customZipImages = ref({});
+
+// --- Camera & Zoom Logic ---
+const zoomScale = ref(1.0);
+const canvasLayerRef = ref(null);
+const activePointers = ref(new Map());
+let initialPinchDist = -1;
+let initialZoom = 1;
+
+const onWheel = (event) => {
+  event.preventDefault();
+  const zoomDelta = event.deltaY * -0.001;
+  // Allows zooming out to 20% (massive table) or in to 200%
+  zoomScale.value = Math.min(Math.max(0.2, zoomScale.value + zoomDelta), 2.0);
+};
+
+const onSurfacePointerDown = (e) => {
+  activePointers.value.set(e.pointerId, e);
+};
+
+const onSurfacePointerMove = (e) => {
+  if (activePointers.value.has(e.pointerId)) {
+    activePointers.value.set(e.pointerId, e);
+  }
+  
+  // Two-finger pinch detection
+  if (activePointers.value.size === 2 && !drag.value.isActive) {
+    const pts = Array.from(activePointers.value.values());
+    const dx = pts[0].clientX - pts[1].clientX;
+    const dy = pts[0].clientY - pts[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (initialPinchDist < 0) {
+      initialPinchDist = dist;
+      initialZoom = zoomScale.value;
+    } else {
+      const ratio = dist / initialPinchDist;
+      zoomScale.value = Math.min(Math.max(0.2, initialZoom * ratio), 2.0);
+    }
+  }
+};
+
+const onSurfacePointerUp = (e) => {
+  activePointers.value.delete(e.pointerId);
+  if (activePointers.value.size < 2) {
+    initialPinchDist = -1;
+  }
+};
+// ---------------------------
 
 const getCardImage = (cardId) => {
   if (activeDeckId.value === 'zip') {
@@ -165,14 +196,7 @@ const handleZipUpload = (event) => {
   console.log("ZIP Selected:", event.target.files[0]?.name);
 };
 
-const drag = ref({
-  isActive: false,
-  source: null,
-  sourceIndex: null,
-  cardData: null,
-  mouseX: 0,
-  mouseY: 0
-});
+const drag = ref({ isActive: false, source: null, sourceIndex: null, cardData: null, mouseX: 0, mouseY: 0 });
 
 const handleDeckPointer = (event) => {
   if (event.button === 1) {
@@ -191,12 +215,7 @@ const startDrag = (event, index, source) => {
   if (source === 'loose') pickedCard = looseCards.value[index];
 
   drag.value = {
-    isActive: true,
-    source,
-    sourceIndex: index,
-    cardData: pickedCard,
-    mouseX: event.clientX,
-    mouseY: event.clientY
+    isActive: true, source, sourceIndex: index, cardData: pickedCard, mouseX: event.clientX, mouseY: event.clientY
   };
 
   window.addEventListener('pointermove', onDragMove);
@@ -211,9 +230,12 @@ const onDragMove = (event) => {
 
 const ghostStyle = computed(() => {
   if (!drag.value.isActive) return {};
+  // The ghost scales with the camera zoom so it matches the board perfectly
   return {
-    left: `${drag.value.mouseX - 70}px`,
-    top: `${drag.value.mouseY - 121}px`,
+    left: `${drag.value.mouseX - (70 * zoomScale.value)}px`,
+    top: `${drag.value.mouseY - (121 * zoomScale.value)}px`,
+    transform: `scale(${zoomScale.value})`,
+    transformOrigin: 'top left'
   };
 });
 
@@ -224,7 +246,8 @@ const onDragEnd = (event) => {
   if (!drag.value.isActive) return;
 
   const dropTarget = document.elementFromPoint(event.clientX, event.clientY)?.closest('.spread-slot');
-  const tableRect = tableSurfaceRef.value?.getBoundingClientRect() || { left: 0, top: 0 };
+  // Get the transformed canvas bounding box to calculate drop math correctly
+  const canvasRect = canvasLayerRef.value?.getBoundingClientRect() || { left: 0, top: 0 };
 
   const card = drag.value.cardData;
   if (drag.value.source === 'deck') deckPool.value.splice(drag.value.sourceIndex, 1);
@@ -243,10 +266,9 @@ const onDragEnd = (event) => {
     }
     activeSpreadCards.value[slotIndex] = card;
   } else {
-    // Drop logic calculates cursor position relative to the table bounding box
-    let dropX = event.clientX - tableRect.left - 70;
-    let dropY = event.clientY - tableRect.top - 121;
-    // Push adds it to the end of the array, ensuring it renders on top of older loose cards
+    // Reverse-calculate where the user dropped the card in the scaled virtual space
+    let dropX = (event.clientX - canvasRect.left) / zoomScale.value - 70;
+    let dropY = (event.clientY - canvasRect.top) / zoomScale.value - 121;
     looseCards.value.push({ ...card, x: dropX, y: dropY });
   }
 
@@ -258,35 +280,26 @@ const getDeckCardStyle = (card, index) => {
   if (drag.value.isActive && drag.value.source === 'deck' && drag.value.sourceIndex === index) {
     return { opacity: 0 };
   }
-
   if (isShuffling.value) {
     return { transform: `translate(${card.scatterX}px, ${card.scatterY}px) rotate(${card.scatterRot}deg)`, zIndex: index };
   }
-
   if (isFanned.value) {
     const total = deckPool.value.length;
     const center = total / 2;
     const offset = index - center;
     const spreadWidth = Math.min(25, 800 / total);
-    
     return {
       transform: `translateX(${offset * spreadWidth}px) translateY(${Math.abs(offset) * 2}px) rotate(${offset * 1.5}deg)`,
-      zIndex: index,
-      transition: 'transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)'
+      zIndex: index, transition: 'transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)'
     };
   }
-
   const stackOffset = (deckPool.value.length - 1 - index) * -0.5;
   return { transform: `translate(${stackOffset}px, ${stackOffset}px)`, zIndex: index, transition: 'transform 0.3s ease' };
 };
 
-// State Machine Engine (Modulo 4 cycle)
-const flipCard = (card) => { 
-  card.tapState = (card.tapState + 1) % 4; 
-};
+const flipCard = (card) => { card.tapState = (card.tapState + 1) % 4; };
 
 const initDeck = () => {
-  // Replaced isFlipped with tapState: 0
   deckPool.value = majorArcana.map(card => ({ ...card, tapState: 0, scatterX: 0, scatterY: 0, scatterRot: 0 }));
   activeSpreadCards.value = new Array(currentSpread.value.positions.length).fill(null);
   looseCards.value = [];
@@ -303,7 +316,7 @@ const animateShuffle = () => {
   looseCards.value = [];
 
   deckPool.value.forEach(card => {
-    card.tapState = 0; // Ensure all cards go back to the deck face down
+    card.tapState = 0;
     card.scatterX = (Math.random() - 0.5) * 200;
     card.scatterY = (Math.random() - 0.5) * 200;
     card.scatterRot = (Math.random() - 0.5) * 90;
@@ -324,27 +337,48 @@ const animateShuffle = () => {
 const resetTable = () => {
   initDeck();
   animateShuffle();
+  zoomScale.value = 1.0; // Reset camera on deck shuffle
 };
 
-onMounted(() => {
-  resetTable();
-});
+onMounted(() => { resetTable(); });
 </script>
 
 <style scoped>
+/* Bulletproof Anti-Selection & Mobile Glitch CSS */
 .tarot-container { 
   min-height: 100vh; 
   background-color: #121212; 
   display: flex; 
   flex-direction: column; 
-  overflow: hidden; 
+  overflow: hidden; /* Prevents whole-page scrolling */
+  touch-action: none; /* Stops the browser from trying to scroll/pinch the whole webpage */
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none; /* Disables the iOS context menu popups completely */
 }
 
 .tarot-container select { user-select: auto; }
 
-.table-surface { flex-grow: 1; position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
+/* Viewport for the Camera */
+.table-surface { 
+  flex-grow: 1; 
+  position: relative; 
+  width: 100%; 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+}
+
+/* Scalable Camera Layer */
+.canvas-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+  transition: transform 0.05s linear; /* Fast response for pinch zooming */
+}
 
 .table-header {
   width: 100%; max-width: 800px; display: flex; justify-content: space-between; align-items: center;
@@ -359,20 +393,12 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
 .btn-primary { background: #d4af37; color: #121212; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.drag-ghost { position: fixed; pointer-events: none; z-index: 9999; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5)); }
+.drag-ghost { position: fixed; pointer-events: none; z-index: 9999; filter: drop-shadow(0 15px 30px rgba(0,0,0,0.8)); }
 .loose-card { position: absolute; cursor: grab; }
 
-/* Spread Layout */
 .spread-layout { display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: center; padding: 2rem; width: 100%; }
 
-/* Deferred Celtic Cross Grid */
-.spread-celticCross { 
-  display: grid; 
-  grid-template-columns: repeat(4, minmax(140px, 165px)); 
-  grid-template-rows: repeat(4, auto); 
-  gap: 1.5rem; 
-  max-width: 900px; 
-}
+.spread-celticCross { display: grid; grid-template-columns: repeat(4, minmax(140px, 165px)); grid-template-rows: repeat(4, auto); gap: 1.5rem; max-width: 900px; }
 .spread-celticCross .spread-slot[data-slot-index="0"] { grid-column: 2; grid-row: 2; z-index: 1; }
 .spread-celticCross .spread-slot[data-slot-index="1"] { grid-column: 2; grid-row: 2; z-index: 2; pointer-events: none; }
 .spread-celticCross .spread-slot[data-slot-index="1"] .card-scene { pointer-events: auto; }
@@ -397,32 +423,28 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
 }
 @media (min-width: 400px) { .slot-placeholder { width: 165px; height: 285px; } }
 
-.deck-area { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: auto; padding-bottom: 2rem; z-index: 200; }
-.fan-toggle { margin-bottom: 1rem; }
+/* Floating Unscaled Deck Area */
+.deck-area { position: absolute; bottom: 2rem; display: flex; flex-direction: column; align-items: center; gap: 1rem; z-index: 200; }
+.zoom-indicator { color: #888; font-size: 0.85rem; font-family: monospace; letter-spacing: 0.1em; }
+.fan-toggle { margin-bottom: 0.5rem; }
 .deck-container { position: relative; width: 140px; height: 242px; touch-action: none; }
 @media (min-width: 400px) { .deck-container { width: 165px; height: 285px; } }
 .deck-container.is-fanned .deck-card { cursor: grab; }
 .empty-deck-shadow { width: 100%; height: 100%; border: 1px solid #333; border-radius: 12px; background: rgba(0,0,0,0.2); }
 .deck-card { position: absolute; top: 0; left: 0; touch-action: none; cursor: grab; }
 .deck-card:active { cursor: grabbing; }
-.deck-label { color: #666; font-size: 0.9rem; letter-spacing: 0.05em; }
+.deck-label { color: #666; font-size: 0.9rem; letter-spacing: 0.05em; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
 
-/* Geometry and State Machine Transforms */
 .card-scene { width: 140px; height: 242px; perspective: 1000px; }
 @media (min-width: 400px) { .card-scene { width: 165px; height: 285px; } }
 
 .card-object { 
   width: 100%; height: 100%; position: relative; 
   transition: transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1); 
-  transform-style: preserve-3d; 
-  transform: rotateY(0deg) rotateZ(0deg); /* State 0: Back */
+  transform-style: preserve-3d; transform: rotateY(0deg) rotateZ(0deg); 
 }
-.card-object.is-flipped { 
-  transform: rotateY(180deg) rotateZ(0deg); /* State 1 & 3: Front */
-}
-.card-object.is-flipped.is-rotated { 
-  transform: rotateY(180deg) rotateZ(90deg); /* State 2: Front Rotated */
-}
+.card-object.is-flipped { transform: rotateY(180deg) rotateZ(0deg); }
+.card-object.is-flipped.is-rotated { transform: rotateY(180deg) rotateZ(90deg); }
 
 .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: -2px 4px 8px rgba(0, 0, 0, 0.6); border: 1px solid #2d2d2d; }
 .card-back { background: radial-gradient(circle, #1a1a2e 0%, #0a0a0f 100%); color: #d4af37; font-size: 2.5rem; }
@@ -430,6 +452,7 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
 .card-front { background: #fbf9f5; color: #1c1a17; transform: rotateY(180deg); padding: 1.25rem; text-align: center; border: 4px double #d4af37; cursor: pointer; }
 .image-front { padding: 0; border: none; background: #000; overflow: hidden; }
 
+/* Force image native drags to entirely disable */
 .tarot-art { width: 100%; height: 100%; object-fit: cover; pointer-events: none; border-radius: inherit; -webkit-user-drag: none; user-drag: none; }
 
 .upload-group { display: flex; align-items: center; }
