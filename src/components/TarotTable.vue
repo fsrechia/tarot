@@ -49,7 +49,7 @@
             <div class="card-object" :class="{ 'is-flipped': activeSpreadCards[index].isFlipped }">
               <div class="card-face card-back"><div class="back-design">✦</div></div>
               <div class="card-face card-front image-front">
-                <img :src="getCardImage(activeSpreadCards[index].id)" class="tarot-art" @error="handleImageError($event, activeSpreadCards[index].id)"/>
+                <img draggable="false" :src="getCardImage(activeSpreadCards[index].id)" class="tarot-art" @error="handleImageError($event, activeSpreadCards[index].id)"/>
               </div>
             </div>
           </div>
@@ -68,7 +68,7 @@
         <div class="card-object" :class="{ 'is-flipped': looseCard.isFlipped }">
           <div class="card-face card-back"><div class="back-design">✦</div></div>
           <div class="card-face card-front image-front">
-             <img :src="getCardImage(looseCard.id)" class="tarot-art" @error="handleImageError($event, looseCard.id)"/>
+             <img draggable="false" :src="getCardImage(looseCard.id)" class="tarot-art" @error="handleImageError($event, looseCard.id)"/>
           </div>
         </div>
       </div>
@@ -101,7 +101,7 @@
         <div class="card-object" :class="{ 'is-flipped': drag.cardData.isFlipped }">
           <div class="card-face card-back"><div class="back-design">✦</div></div>
           <div class="card-face card-front image-front">
-            <img :src="getCardImage(drag.cardData.id)" class="tarot-art" @error="handleImageError($event, drag.cardData.id)"/>
+            <img draggable="false" :src="getCardImage(drag.cardData.id)" class="tarot-art" @error="handleImageError($event, drag.cardData.id)"/>
           </div>
         </div>
       </div>
@@ -112,7 +112,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 
-// --- State & Config ---
 const availableDecks = [
   { id: 'standard', name: 'Standard (Rider-Waite)' },
   { id: 'vitoria', name: 'Vitoriushka' },
@@ -144,8 +143,6 @@ const isShuffling = ref(false);
 const isFanned = ref(false);
 
 const tableSurfaceRef = ref(null);
-
-// --- Image Fallback Logic ---
 const customZipImages = ref({});
 
 const getCardImage = (cardId) => {
@@ -163,10 +160,8 @@ const handleImageError = (e, cardId) => {
 
 const handleZipUpload = (event) => {
   console.log("ZIP Selected:", event.target.files[0]?.name);
-  // Future JSZip logic goes here
 };
 
-// --- Drag & Drop Physics Engine ---
 const drag = ref({
   isActive: false,
   source: null,
@@ -282,11 +277,10 @@ const getDeckCardStyle = (card, index) => {
 
 const flipCard = (card) => { card.isFlipped = !card.isFlipped; };
 
-// --- Logic properly ordered for Vue's compiler ---
 const initDeck = () => {
   deckPool.value = majorArcana.map(card => ({ ...card, isFlipped: false, scatterX: 0, scatterY: 0, scatterRot: 0 }));
   activeSpreadCards.value = new Array(currentSpread.value.positions.length).fill(null);
-  looseCards.value = []; // Clear the table on init
+  looseCards.value = [];
   isFanned.value = false;
 };
 
@@ -323,30 +317,32 @@ const resetTable = () => {
   animateShuffle();
 };
 
-// Start the table properly on component load!
 onMounted(() => {
   resetTable();
 });
 </script>
 
 <style scoped>
-/* Core layout */
-.tarot-container { min-height: 100vh; background-color: #121212; display: flex; flex-direction: column; overflow: hidden; }
+/* Disable all native text/image selection to prevent blue highlights and dragging glitches */
+.tarot-container { 
+  min-height: 100vh; 
+  background-color: #121212; 
+  display: flex; 
+  flex-direction: column; 
+  overflow: hidden; 
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Re-enable selection specifically for dropdowns */
+.tarot-container select { user-select: auto; }
+
 .table-surface { flex-grow: 1; position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
 
 .table-header {
-  width: 100%;
-  max-width: 800px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #1a1a1a;
-  padding: 1rem 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  border: 1px solid #2a2a2a;
-  margin-bottom: 2rem;
-  z-index: 10;
+  width: 100%; max-width: 800px; display: flex; justify-content: space-between; align-items: center;
+  background: #1a1a1a; padding: 1rem 1.5rem; border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4); border: 1px solid #2a2a2a; margin-bottom: 2rem; z-index: 10;
 }
 
 .selector-group { display: flex; align-items: center; gap: 1rem; color: #e0e0e0; }
@@ -356,21 +352,39 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
 .btn-primary { background: #d4af37; color: #121212; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* The Ghost Card */
 .drag-ghost { position: fixed; pointer-events: none; z-index: 9999; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5)); }
-
-/* Loose cards */
 .loose-card { position: absolute; cursor: grab; }
-
-/* Spread Container */
 .spread-layout { display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: center; padding: 2rem; width: 100%; }
 
-/* --- CELTIC CROSS --- */
-.spread-celticCross { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr 1fr; gap: 1rem; max-width: 800px; }
+/* --- REVISED CELTIC CROSS GRID --- */
+.spread-celticCross { 
+  display: grid; 
+  grid-template-columns: repeat(4, minmax(140px, 165px)); 
+  grid-template-rows: repeat(4, auto); 
+  gap: 1.5rem; 
+  max-width: 900px; 
+}
 .spread-celticCross .spread-slot[data-slot-index="0"] { grid-column: 2; grid-row: 2; z-index: 1; }
-.spread-celticCross .spread-slot[data-slot-index="1"] { grid-column: 2; grid-row: 2; z-index: 2; }
+
+/* Slot 1 (The Challenge) Overlap Fixes */
+.spread-celticCross .spread-slot[data-slot-index="1"] { 
+  grid-column: 2; 
+  grid-row: 2; 
+  z-index: 2; 
+  pointer-events: none; /* Allows clicks to pass through the wrapper down to Slot 0 */
+}
+.spread-celticCross .spread-slot[data-slot-index="1"] .card-scene { 
+  pointer-events: auto; /* Re-enables clicking/dragging on the actual horizontal card */
+}
+.spread-celticCross .spread-slot[data-slot-index="1"] .slot-placeholder { 
+  border-color: transparent; 
+  background: transparent; 
+}
+.spread-celticCross .spread-slot[data-slot-index="1"] .slot-label { 
+  display: none; /* Prevents text collision with Slot 0's label */
+}
 .spread-celticCross .spread-slot.is-horizontal .card-scene { transform: rotate(-90deg); }
-.spread-celticCross .spread-slot.is-horizontal .slot-placeholder { transform: rotate(-90deg); }
+
 .spread-celticCross .spread-slot[data-slot-index="2"] { grid-column: 2; grid-row: 3; }
 .spread-celticCross .spread-slot[data-slot-index="3"] { grid-column: 1; grid-row: 2; }
 .spread-celticCross .spread-slot[data-slot-index="4"] { grid-column: 2; grid-row: 1; }
@@ -387,10 +401,8 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
   width: 140px; height: 242px; border: 2px dashed #444; border-radius: 12px;
   display: flex; align-items: center; justify-content: center; color: #555; background: rgba(255, 255, 255, 0.02);
 }
-
 @media (min-width: 400px) { .slot-placeholder { width: 165px; height: 285px; } }
 
-/* Physical Deck Zone */
 .deck-area { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: auto; padding-bottom: 2rem; z-index: 200; }
 .fan-toggle { margin-bottom: 1rem; }
 .deck-container { position: relative; width: 140px; height: 242px; touch-action: none; }
@@ -401,7 +413,6 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
 .deck-card:active { cursor: grabbing; }
 .deck-label { color: #666; font-size: 0.9rem; letter-spacing: 0.05em; }
 
-/* Shared Card Geometry */
 .card-scene { width: 140px; height: 242px; perspective: 1000px; }
 @media (min-width: 400px) { .card-scene { width: 165px; height: 285px; } }
 .card-object { width: 100%; height: 100%; position: relative; transition: transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1); transform-style: preserve-3d; }
@@ -411,11 +422,12 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
 .back-design { border: 1px solid rgba(212, 175, 55, 0.2); width: calc(100% - 16px); height: calc(100% - 16px); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
 .card-front { background: #fbf9f5; color: #1c1a17; transform: rotateY(180deg); padding: 1.25rem; text-align: center; border: 4px double #d4af37; cursor: pointer; }
 .image-front { padding: 0; border: none; background: #000; overflow: hidden; }
-.tarot-art { width: 100%; height: 100%; object-fit: cover; pointer-events: none; border-radius: inherit; }
+
+/* Force user-drag none to catch any lingering browser quirks */
+.tarot-art { width: 100%; height: 100%; object-fit: cover; pointer-events: none; border-radius: inherit; -webkit-user-drag: none; user-drag: none; }
 
 .upload-group { display: flex; align-items: center; }
 .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
-
 .controls-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: center; width: 100%; }
 @media (min-width: 600px) { .controls-row { width: auto; justify-content: flex-start; } }
 </style>
