@@ -1,6 +1,13 @@
 <template>
   <div class="tarot-container">
     <header class="table-header">
+      <div class="upload-group">
+        <label class="btn btn-secondary btn-sm" for="zip-upload">
+          Upload Custom Deck (.zip)
+        </label>
+        <input type="file" id="zip-upload" accept=".zip" hidden @change="handleZipUpload" />
+      </div>
+
       <div class="selector-group">
         <label for="spread-select">Spread:</label>
         <select id="spread-select" v-model="currentSpreadKey" @change="resetTable">
@@ -9,35 +16,34 @@
           </option>
         </select>
       </div>
+      
       <button class="btn btn-primary" :disabled="isShuffling" @click="animateShuffle">
         {{ isShuffling ? 'Shuffling...' : 'Shuffle Deck' }}
       </button>
     </header>
 
     <main class="table-surface">
-      
       <div class="spread-layout" :class="`spread-${currentSpreadKey}`">
-        <div 
-          v-for="(position, index) in currentSpread.positions" 
-          :key="index" 
-          class="spread-slot"
-          :data-slot-index="index"
-        >
+        <div v-for="(position, index) in currentSpread.positions" :key="index" class="spread-slot" :data-slot-index="index">
           <div class="slot-label">{{ position }}</div>
           
           <div v-if="activeSpreadCards[index]" class="card-scene" @click="flipCard(index)">
             <div class="card-object" :class="{ 'is-flipped': activeSpreadCards[index].isFlipped }">
               <div class="card-face card-back"><div class="back-design">✦</div></div>
-              <div class="card-face card-front">
-                <span class="card-numeral">{{ activeSpreadCards[index].roman }}</span>
-                <h2 class="card-title">{{ activeSpreadCards[index].name }}</h2>
+              
+              <div class="card-face card-front image-front">
+                <img 
+                  :src="getCardImage(activeSpreadCards[index].id)" 
+                  :alt="activeSpreadCards[index].name"
+                  class="tarot-art"
+                  @error="handleImageError($event, activeSpreadCards[index].id)"
+                />
               </div>
+
             </div>
           </div>
           
-          <div v-else class="slot-placeholder">
-            <span>Drop Here</span>
-          </div>
+          <div v-else class="slot-placeholder"><span>Drop Here</span></div>
         </div>
       </div>
 
@@ -58,7 +64,6 @@
         </div>
         <div class="deck-label">Remaining: {{ deckPool.length }}</div>
       </div>
-
     </main>
   </div>
 </template>
@@ -66,29 +71,52 @@
 <script setup>
 import { ref, computed } from 'vue';
 
+// --- Image Fallback Engine ---
+
+// 1. Store ZIP URLs in memory (Empty for now until we build JSZip)
+const customZipImages = ref({}); 
+
+// 2. The active template folder name inside public/decks/
+const activeTemplate = ref('my_template'); 
+
+const getCardImage = (cardId) => {
+  // Tier 1: User uploaded a ZIP and it contains this specific card ID
+  if (customZipImages.value[cardId]) {
+    return customZipImages.value[cardId];
+  }
+  
+  // Tier 2: Try the chosen template folder first (Served from Astro public folder)
+  // We assume .webp here, but if it fails, the @error handler catches it
+  return `/decks/${activeTemplate.value}/${cardId}.webp`;
+};
+
+const handleImageError = (event, cardId) => {
+  // Tier 3 (The Ultimate Fallback): If the template image 404s, swap to standard RWS
+  const standardFallback = `/decks/standard/${cardId}.webp`;
+  
+  // Prevent infinite loops if the standard image is ALSO missing
+  if (event.target.src.includes(standardFallback)) return; 
+  
+  event.target.src = standardFallback;
+};
+
+const handleZipUpload = (event) => {
+  console.log("File selected! We will hook up JSZip here next.");
+};
+
+// --- Standard Deck Logic (Unchanged from previous step) ---
 const majorArcana = [
-  { id: '00', roman: '0', name: 'The Fool' },
-  { id: '01', roman: 'I', name: 'The Magician' },
-  { id: '02', roman: 'II', name: 'The High Priestess' },
-  { id: '03', roman: 'III', name: 'The Empress' },
-  { id: '04', roman: 'IV', name: 'The Emperor' },
-  { id: '05', roman: 'V', name: 'The Hierophant' },
-  { id: '06', roman: 'VI', name: 'The Lovers' },
-  { id: '07', roman: 'VII', name: 'The Chariot' },
-  { id: '08', roman: 'VIII', name: 'Strength' },
-  { id: '09', roman: 'IX', name: 'The Hermit' },
-  { id: '10', roman: 'X', name: 'Wheel of Fortune' },
-  { id: '11', roman: 'XI', name: 'Justice' },
-  { id: '12', roman: 'XII', name: 'The Hanged Man' },
-  { id: '13', roman: 'XIII', name: 'Death' },
-  { id: '14', roman: 'XIV', name: 'Temperance' },
-  { id: '15', roman: 'XV', name: 'The Devil' },
-  { id: '16', roman: 'XVI', name: 'The Tower' },
-  { id: '17', roman: 'XVII', name: 'The Star' },
-  { id: '18', roman: 'XVIII', name: 'The Moon' },
-  { id: '19', roman: 'XIX', name: 'The Sun' },
-  { id: '20', roman: 'XX', name: 'Judgement' },
-  { id: '21', roman: 'XXI', name: 'The World' }
+  { id: '00', roman: '0', name: 'The Fool' }, { id: '01', roman: 'I', name: 'The Magician' },
+  { id: '02', roman: 'II', name: 'The High Priestess' }, { id: '03', roman: 'III', name: 'The Empress' },
+  { id: '04', roman: 'IV', name: 'The Emperor' }, { id: '05', roman: 'V', name: 'The Hierophant' },
+  { id: '06', roman: 'VI', name: 'The Lovers' }, { id: '07', roman: 'VII', name: 'The Chariot' },
+  { id: '08', roman: 'VIII', name: 'Strength' }, { id: '09', roman: 'IX', name: 'The Hermit' },
+  { id: '10', roman: 'X', name: 'Wheel of Fortune' }, { id: '11', roman: 'XI', name: 'Justice' },
+  { id: '12', roman: 'XII', name: 'The Hanged Man' }, { id: '13', roman: 'XIII', name: 'Death' },
+  { id: '14', roman: 'XIV', name: 'Temperance' }, { id: '15', roman: 'XV', name: 'The Devil' },
+  { id: '16', roman: 'XVI', name: 'The Tower' }, { id: '17', roman: 'XVII', name: 'The Star' },
+  { id: '18', roman: 'XVIII', name: 'The Moon' }, { id: '19', roman: 'XIX', name: 'The Sun' },
+  { id: '20', roman: 'XX', name: 'Judgement' }, { id: '21', roman: 'XXI', name: 'The World' }
 ];
 
 const spreads = {
@@ -104,48 +132,27 @@ const deckPool = ref([]);
 const activeSpreadCards = ref([]);
 const isShuffling = ref(false);
 
-// Drag State Management
-const drag = ref({
-  isActive: false,
-  cardIndex: null,
-  startX: 0,
-  startY: 0,
-  deltaX: 0,
-  deltaY: 0
-});
+const drag = ref({ isActive: false, cardIndex: null, startX: 0, startY: 0, deltaX: 0, deltaY: 0 });
 
-// Initialize Deck with physics/animation properties
 const initDeck = () => {
-  deckPool.value = majorArcana.map(card => ({
-    ...card,
-    isFlipped: false,
-    scatterX: 0,
-    scatterY: 0,
-    scatterRot: 0
-  }));
-  // Pre-fill active slots with nulls based on spread size
+  deckPool.value = majorArcana.map(card => ({ ...card, isFlipped: false, scatterX: 0, scatterY: 0, scatterRot: 0 }));
   activeSpreadCards.value = new Array(currentSpread.value.positions.length).fill(null);
 };
 
-// 1. Visual Scatter Animation -> 2. Array Shuffle -> 3. Gather Animation
 const animateShuffle = () => {
   if (isShuffling.value) return;
   isShuffling.value = true;
-  
-  // Return all cards from table to deck
   const allCards = [...deckPool.value, ...activeSpreadCards.value.filter(c => c !== null)];
   deckPool.value = allCards;
   activeSpreadCards.value = new Array(currentSpread.value.positions.length).fill(null);
 
-  // Step 1: Scatter the cards outwards visually
   deckPool.value.forEach(card => {
     card.isFlipped = false;
-    card.scatterX = (Math.random() - 0.5) * 200; // Spread horizontally
-    card.scatterY = (Math.random() - 0.5) * 200; // Spread vertically
-    card.scatterRot = (Math.random() - 0.5) * 90; // Random tilt
+    card.scatterX = (Math.random() - 0.5) * 200;
+    card.scatterY = (Math.random() - 0.5) * 200;
+    card.scatterRot = (Math.random() - 0.5) * 90;
   });
 
-  // Step 2: Actually shuffle the data array while they are scattered
   setTimeout(() => {
     let currentIndex = deckPool.value.length;
     while (currentIndex !== 0) {
@@ -153,67 +160,27 @@ const animateShuffle = () => {
       currentIndex--;
       [deckPool.value[currentIndex], deckPool.value[randomIndex]] = [deckPool.value[randomIndex], deckPool.value[currentIndex]];
     }
-    
-    // Step 3: Pull them back into a neat stack
-    deckPool.value.forEach(card => {
-      card.scatterX = 0;
-      card.scatterY = 0;
-      card.scatterRot = 0;
-    });
-
-    setTimeout(() => {
-      isShuffling.value = false;
-    }, 400); // Wait for gather animation
-  }, 400); // Wait for scatter animation
+    deckPool.value.forEach(card => { card.scatterX = 0; card.scatterY = 0; card.scatterRot = 0; });
+    setTimeout(() => { isShuffling.value = false; }, 400);
+  }, 400);
 };
 
-// Calculate dynamic styles for deck cards (Stacking, Shuffling, or Dragging)
 const getCardStyle = (card, index) => {
-  // If this card is currently being dragged by the user
   if (drag.value.isActive && drag.value.cardIndex === index) {
-    return {
-      transform: `translate(${drag.value.deltaX}px, ${drag.value.deltaY}px) scale(1.05)`,
-      zIndex: 999,
-      transition: 'none' // Remove transition so it follows the finger instantly
-    };
+    return { transform: `translate(${drag.value.deltaX}px, ${drag.value.deltaY}px) scale(1.05)`, zIndex: 999, transition: 'none' };
   }
-
-  // If shuffling, apply scatter coordinates
   if (isShuffling.value) {
-    return {
-      transform: `translate(${card.scatterX}px, ${card.scatterY}px) rotate(${card.scatterRot}deg)`,
-      zIndex: index,
-      transition: 'transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)'
-    };
+    return { transform: `translate(${card.scatterX}px, ${card.scatterY}px) rotate(${card.scatterRot}deg)`, zIndex: index, transition: 'transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)' };
   }
-
-  // Default: Neatly stacked. Top cards have a slight negative offset to create 3D depth
   const stackOffset = (deckPool.value.length - 1 - index) * -0.5;
-  return {
-    transform: `translate(${stackOffset}px, ${stackOffset}px)`,
-    zIndex: index,
-    transition: 'transform 0.3s ease'
-  };
+  return { transform: `translate(${stackOffset}px, ${stackOffset}px)`, zIndex: index, transition: 'transform 0.3s ease' };
 };
-
-// -- Pointer Drag and Drop Mechanics --
 
 const startDrag = (event, index) => {
-  // Only allow dragging the top card of the deck
   if (index !== deckPool.value.length - 1 || isShuffling.value) return;
-
   const el = event.currentTarget;
-  el.setPointerCapture(event.pointerId); // Lock interactions to this element
-
-  drag.value = {
-    isActive: true,
-    cardIndex: index,
-    startX: event.clientX,
-    startY: event.clientY,
-    deltaX: 0,
-    deltaY: 0
-  };
-
+  el.setPointerCapture(event.pointerId);
+  drag.value = { isActive: true, cardIndex: index, startX: event.clientX, startY: event.clientY, deltaX: 0, deltaY: 0 };
   el.addEventListener('pointermove', onDragMove);
   el.addEventListener('pointerup', onDragEnd);
 };
@@ -229,28 +196,17 @@ const onDragEnd = (event) => {
   el.removeEventListener('pointermove', onDragMove);
   el.removeEventListener('pointerup', onDragEnd);
   el.releasePointerCapture(event.pointerId);
-
-  // Briefly hide the dragged card so we can see what DOM element is underneath the finger
   el.style.visibility = 'hidden';
   const dropTarget = document.elementFromPoint(event.clientX, event.clientY)?.closest('.spread-slot');
   el.style.visibility = 'visible';
 
-  // Check if we dropped it on a valid slot
   if (dropTarget) {
     const slotIndex = parseInt(dropTarget.getAttribute('data-slot-index'), 10);
-    
-    // If the slot is empty, move the card from the deck array to the spread array
     if (activeSpreadCards.value[slotIndex] === null) {
-      const card = deckPool.value.pop();
-      activeSpreadCards.value[slotIndex] = card;
+      activeSpreadCards.value[slotIndex] = deckPool.value.pop();
     }
   }
-
-  // Reset drag state (snaps back to deck if dropped in an invalid area)
-  drag.value.isActive = false;
-  drag.value.cardIndex = null;
-  drag.value.deltaX = 0;
-  drag.value.deltaY = 0;
+  drag.value = { isActive: false, cardIndex: null, startX: 0, startY: 0, deltaX: 0, deltaY: 0 };
 };
 
 const flipCard = (index) => {
@@ -259,13 +215,10 @@ const flipCard = (index) => {
   }
 };
 
-const resetTable = () => {
-  initDeck();
-  animateShuffle();
-};
+const resetTable = () => { initDeck(); animateShuffle(); };
 
 initDeck();
-setTimeout(animateShuffle, 100); // Initial shuffle on load
+setTimeout(animateShuffle, 100);
 </script>
 
 <style scoped>
@@ -475,4 +428,30 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
 
 .card-numeral { font-size: 1.1rem; color: #7f6c44; font-weight: 600; margin-bottom: auto; }
 .card-title { font-size: 1.25rem; margin-bottom: auto; font-weight: 500; }
+
+/* Update the front face to remove text padding and accept images */
+.image-front {
+  padding: 0;
+  border: none;
+  background: #000; /* Dark background behind images */
+  overflow: hidden; /* Ensure rounded corners clip the image */
+}
+
+.tarot-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Ensures the image fills the card, cropping edges if aspect ratio is slightly off */
+  pointer-events: none; /* Prevents ghost-dragging the image element itself */
+  border-radius: inherit; /* Matches the card-face rounded corners */
+}
+
+/* Small styling for the new upload button */
+.upload-group {
+  display: flex;
+  align-items: center;
+}
+.btn-sm {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
 </style>
