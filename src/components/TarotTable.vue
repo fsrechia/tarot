@@ -2,56 +2,63 @@
   <div class="tarot-container">
     <header class="table-header">
       <div class="selector-group">
-        <label for="spread-select">Choose Spread:</label>
+        <label for="spread-select">Spread:</label>
         <select id="spread-select" v-model="currentSpreadKey" @change="resetTable">
           <option v-for="(spread, key) in spreads" :key="key" :value="key">
-            {{ spread.name }} ({{ spread.positions.length }} {{ spread.positions.length === 1 ? 'Card' : 'Cards' }})
+            {{ spread.name }}
           </option>
         </select>
       </div>
-
-      <div class="action-group">
-        <button class="btn btn-primary" :disabled="isShuffling" @click="shuffleAndReset">
-          {{ isShuffling ? 'Shuffling...' : 'Shuffle Deck' }}
-        </button>
-        <button 
-          class="btn btn-secondary" 
-          :disabled="activeSpreadCards.length >= currentSpread.positions.length || isShuffling" 
-          @click="dealCard"
-        >
-          Deal Card
-        </button>
-      </div>
+      <button class="btn btn-primary" :disabled="isShuffling" @click="animateShuffle">
+        {{ isShuffling ? 'Shuffling...' : 'Shuffle Deck' }}
+      </button>
     </header>
 
     <main class="table-surface">
+      
       <div class="spread-layout" :class="`spread-${currentSpreadKey}`">
         <div 
           v-for="(position, index) in currentSpread.positions" 
           :key="index" 
           class="spread-slot"
+          :data-slot-index="index"
         >
           <div class="slot-label">{{ position }}</div>
           
           <div v-if="activeSpreadCards[index]" class="card-scene" @click="flipCard(index)">
             <div class="card-object" :class="{ 'is-flipped': activeSpreadCards[index].isFlipped }">
-              
-              <div class="card-face card-back">
-                <div class="back-design">✦</div>
-              </div>
-              
+              <div class="card-face card-back"><div class="back-design">✦</div></div>
               <div class="card-face card-front">
                 <span class="card-numeral">{{ activeSpreadCards[index].roman }}</span>
                 <h2 class="card-title">{{ activeSpreadCards[index].name }}</h2>
               </div>
-
             </div>
           </div>
+          
           <div v-else class="slot-placeholder">
-            <span>?</span>
+            <span>Drop Here</span>
           </div>
         </div>
       </div>
+
+      <div class="deck-area">
+        <div class="deck-container">
+          <div 
+            v-for="(card, index) in deckPool" 
+            :key="card.id"
+            class="card-scene deck-card"
+            :style="getCardStyle(card, index)"
+            @pointerdown="startDrag($event, index)"
+          >
+            <div class="card-object">
+              <div class="card-face card-back"><div class="back-design">✦</div></div>
+            </div>
+          </div>
+          <div v-if="deckPool.length === 0" class="empty-deck-shadow"></div>
+        </div>
+        <div class="deck-label">Remaining: {{ deckPool.length }}</div>
+      </div>
+
     </main>
   </div>
 </template>
@@ -59,7 +66,6 @@
 <script setup>
 import { ref, computed } from 'vue';
 
-// 1. Full 22 Major Arcana Dataset
 const majorArcana = [
   { id: '00', roman: '0', name: 'The Fool' },
   { id: '01', roman: 'I', name: 'The Magician' },
@@ -85,84 +91,185 @@ const majorArcana = [
   { id: '21', roman: 'XXI', name: 'The World' }
 ];
 
-// 2. Defined Reading Spreads
 const spreads = {
-  single: {
-    name: 'Single Card',
-    positions: ['Daily Energy / Core Focus']
-  },
-  threeCard: {
-    name: 'Three Fates',
-    positions: ['Past', 'Present', 'Future']
-  },
-  mindBodySpirit: {
-    name: 'Holistic Triad',
-    positions: ['Mind (Conscious)', 'Body (Physical)', 'Spirit (Unconscious)']
-  }
+  single: { name: 'Single Focus', positions: ['Insight'] },
+  threeCard: { name: 'Three Fates', positions: ['Past', 'Present', 'Future'] },
+  mindBodySpirit: { name: 'Holistic Triad', positions: ['Mind', 'Body', 'Spirit'] }
 };
 
-// 3. Reactive State
 const currentSpreadKey = ref('threeCard');
+const currentSpread = computed(() => spreads[currentSpreadKey.value]);
+
 const deckPool = ref([]);
 const activeSpreadCards = ref([]);
 const isShuffling = ref(false);
 
-const currentSpread = computed(() => spreads[currentSpreadKey.value]);
+// Drag State Management
+const drag = ref({
+  isActive: false,
+  cardIndex: null,
+  startX: 0,
+  startY: 0,
+  deltaX: 0,
+  deltaY: 0
+});
 
-// 4. Game Mechanics Logic
+// Initialize Deck with physics/animation properties
 const initDeck = () => {
   deckPool.value = majorArcana.map(card => ({
     ...card,
-    isFlipped: false
+    isFlipped: false,
+    scatterX: 0,
+    scatterY: 0,
+    scatterRot: 0
   }));
+  // Pre-fill active slots with nulls based on spread size
+  activeSpreadCards.value = new Array(currentSpread.value.positions.length).fill(null);
 };
 
-const shuffleAndReset = () => {
+// 1. Visual Scatter Animation -> 2. Array Shuffle -> 3. Gather Animation
+const animateShuffle = () => {
+  if (isShuffling.value) return;
   isShuffling.value = true;
-  // Clear the board first
-  activeSpreadCards.value = [];
   
-  // High-velocity Fisher-Yates shuffle
-  initDeck();
-  let currentIndex = deckPool.value.length;
-  while (currentIndex !== 0) {
-    const randomIndex = Math.floor(Math.random() * currentIndex);
-    currentIndex--;
-    [deckPool.value[currentIndex], deckPool.value[randomIndex]] = [
-      deckPool.value[randomIndex], deckPool.value[currentIndex]
-    ];
+  // Return all cards from table to deck
+  const allCards = [...deckPool.value, ...activeSpreadCards.value.filter(c => c !== null)];
+  deckPool.value = allCards;
+  activeSpreadCards.value = new Array(currentSpread.value.positions.length).fill(null);
+
+  // Step 1: Scatter the cards outwards visually
+  deckPool.value.forEach(card => {
+    card.isFlipped = false;
+    card.scatterX = (Math.random() - 0.5) * 200; // Spread horizontally
+    card.scatterY = (Math.random() - 0.5) * 200; // Spread vertically
+    card.scatterRot = (Math.random() - 0.5) * 90; // Random tilt
+  });
+
+  // Step 2: Actually shuffle the data array while they are scattered
+  setTimeout(() => {
+    let currentIndex = deckPool.value.length;
+    while (currentIndex !== 0) {
+      const randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex--;
+      [deckPool.value[currentIndex], deckPool.value[randomIndex]] = [deckPool.value[randomIndex], deckPool.value[currentIndex]];
+    }
+    
+    // Step 3: Pull them back into a neat stack
+    deckPool.value.forEach(card => {
+      card.scatterX = 0;
+      card.scatterY = 0;
+      card.scatterRot = 0;
+    });
+
+    setTimeout(() => {
+      isShuffling.value = false;
+    }, 400); // Wait for gather animation
+  }, 400); // Wait for scatter animation
+};
+
+// Calculate dynamic styles for deck cards (Stacking, Shuffling, or Dragging)
+const getCardStyle = (card, index) => {
+  // If this card is currently being dragged by the user
+  if (drag.value.isActive && drag.value.cardIndex === index) {
+    return {
+      transform: `translate(${drag.value.deltaX}px, ${drag.value.deltaY}px) scale(1.05)`,
+      zIndex: 999,
+      transition: 'none' // Remove transition so it follows the finger instantly
+    };
   }
 
-  // Artificial delay to let mobile users register the shuffle state change visually
-  setTimeout(() => {
-    isShuffling.value = false;
-  }, 400);
+  // If shuffling, apply scatter coordinates
+  if (isShuffling.value) {
+    return {
+      transform: `translate(${card.scatterX}px, ${card.scatterY}px) rotate(${card.scatterRot}deg)`,
+      zIndex: index,
+      transition: 'transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)'
+    };
+  }
+
+  // Default: Neatly stacked. Top cards have a slight negative offset to create 3D depth
+  const stackOffset = (deckPool.value.length - 1 - index) * -0.5;
+  return {
+    transform: `translate(${stackOffset}px, ${stackOffset}px)`,
+    zIndex: index,
+    transition: 'transform 0.3s ease'
+  };
 };
 
-const dealCard = () => {
-  if (deckPool.value.length === 0) return;
-  if (activeSpreadCards.value.length >= currentSpread.value.positions.length) return;
+// -- Pointer Drag and Drop Mechanics --
 
-  // Pull the top card off our virtual randomized deck
-  const nextCard = deckPool.value.pop();
-  activeSpreadCards.value.push(nextCard);
+const startDrag = (event, index) => {
+  // Only allow dragging the top card of the deck
+  if (index !== deckPool.value.length - 1 || isShuffling.value) return;
+
+  const el = event.currentTarget;
+  el.setPointerCapture(event.pointerId); // Lock interactions to this element
+
+  drag.value = {
+    isActive: true,
+    cardIndex: index,
+    startX: event.clientX,
+    startY: event.clientY,
+    deltaX: 0,
+    deltaY: 0
+  };
+
+  el.addEventListener('pointermove', onDragMove);
+  el.addEventListener('pointerup', onDragEnd);
+};
+
+const onDragMove = (event) => {
+  if (!drag.value.isActive) return;
+  drag.value.deltaX = event.clientX - drag.value.startX;
+  drag.value.deltaY = event.clientY - drag.value.startY;
+};
+
+const onDragEnd = (event) => {
+  const el = event.currentTarget;
+  el.removeEventListener('pointermove', onDragMove);
+  el.removeEventListener('pointerup', onDragEnd);
+  el.releasePointerCapture(event.pointerId);
+
+  // Briefly hide the dragged card so we can see what DOM element is underneath the finger
+  el.style.visibility = 'hidden';
+  const dropTarget = document.elementFromPoint(event.clientX, event.clientY)?.closest('.spread-slot');
+  el.style.visibility = 'visible';
+
+  // Check if we dropped it on a valid slot
+  if (dropTarget) {
+    const slotIndex = parseInt(dropTarget.getAttribute('data-slot-index'), 10);
+    
+    // If the slot is empty, move the card from the deck array to the spread array
+    if (activeSpreadCards.value[slotIndex] === null) {
+      const card = deckPool.value.pop();
+      activeSpreadCards.value[slotIndex] = card;
+    }
+  }
+
+  // Reset drag state (snaps back to deck if dropped in an invalid area)
+  drag.value.isActive = false;
+  drag.value.cardIndex = null;
+  drag.value.deltaX = 0;
+  drag.value.deltaY = 0;
 };
 
 const flipCard = (index) => {
-  activeSpreadCards.value[index].isFlipped = !activeSpreadCards.value[index].isFlipped;
+  if (activeSpreadCards.value[index]) {
+    activeSpreadCards.value[index].isFlipped = !activeSpreadCards.value[index].isFlipped;
+  }
 };
 
 const resetTable = () => {
-  activeSpreadCards.value = [];
-  shuffleAndReset();
+  initDeck();
+  animateShuffle();
 };
 
-// Auto-populate the table surface on initialization
 initDeck();
-shuffleAndReset();
+setTimeout(animateShuffle, 100); // Initial shuffle on load
 </script>
 
 <style scoped>
+/* Core layout retains the dark, focused atmosphere */
 .tarot-container {
   display: flex;
   flex-direction: column;
@@ -173,115 +280,56 @@ shuffleAndReset();
   padding: 1.5rem;
   font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   box-sizing: border-box;
+  overflow: hidden; /* Prevent body scrolling during drag */
 }
 
 .table-header {
   width: 100%;
   max-width: 800px;
   display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+  justify-content: space-between;
   align-items: center;
   background: #1a1a1a;
-  padding: 1.25rem;
+  padding: 1rem 1.5rem;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   border: 1px solid #2a2a2a;
   margin-bottom: 2rem;
+  z-index: 10;
 }
 
-@media (min-width: 600px) {
-  .table-header {
-    flex-direction: row;
-    justify-content: space-between;
-  }
-}
-
-.selector-group {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.selector-group label {
-  font-size: 0.95rem;
-  color: #b3b3b3;
-}
-
-select {
-  background: #262626;
-  color: #d4af37;
-  border: 1px solid #404040;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  font-family: inherit;
-  outline: none;
-}
-
-.action-group {
-  display: flex;
-  gap: 0.75rem;
-  width: 100%;
-}
-
-@media (min-width: 600px) {
-  .action-group {
-    width: auto;
-  }
-}
+.selector-group { display: flex; align-items: center; gap: 1rem; }
+select { background: #262626; color: #d4af37; border: 1px solid #404040; padding: 0.5rem; border-radius: 6px; }
 
 .btn {
-  flex: 1;
   padding: 0.65rem 1.25rem;
   font-size: 0.95rem;
   font-weight: 600;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
   border: none;
-  text-align: center;
 }
-
-.btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: #d4af37;
-  color: #121212;
-}
-
-.btn-primary:not(:disabled):hover {
-  background: #f1c40f;
-}
-
-.btn-secondary {
-  background: transparent;
-  color: #d4af37;
-  border: 1px solid #d4af37;
-}
-
-.btn-secondary:not(:disabled):hover {
-  background: rgba(212, 175, 55, 0.1);
-}
+.btn-primary { background: #d4af37; color: #121212; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .table-surface {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1000px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 3rem;
   flex-grow: 1;
 }
 
-/* Flexible Spread Layouts Container */
+/* Spread Drop Zones */
 .spread-layout {
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
   justify-content: center;
   width: 100%;
+  min-height: 320px;
 }
 
 .spread-slot {
@@ -297,38 +345,82 @@ select {
   letter-spacing: 0.1em;
   color: #aaa;
   text-align: center;
-  max-width: 150px;
-  min-height: 2rem;
-  display: flex;
-  align-items: center;
-}
-
-/* Card Geometry & Aspect Ratios matching standard 2.75:4.75 */
-.card-scene {
-  width: 140px;
-  height: 242px;
-  perspective: 1000px;
-  cursor: pointer;
-}
-
-@media (min-width: 400px) {
-  .card-scene, .slot-placeholder {
-    width: 165px;
-    height: 285px;
-  }
 }
 
 .slot-placeholder {
   width: 140px;
   height: 242px;
-  border: 2px dashed #333;
+  border: 2px dashed #444;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #333;
-  font-size: 2rem;
-  background: rgba(255, 255, 255, 0.01);
+  color: #555;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.2s;
+}
+
+@media (min-width: 400px) {
+  .slot-placeholder { width: 165px; height: 285px; }
+}
+
+/* Physical Deck Zone */
+.deck-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-top: auto;
+  padding-bottom: 2rem;
+}
+
+.deck-container {
+  position: relative;
+  width: 140px;
+  height: 242px;
+}
+
+@media (min-width: 400px) {
+  .deck-container { width: 165px; height: 285px; }
+}
+
+.empty-deck-shadow {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #333;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.2);
+}
+
+.deck-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* CRITICAL: touch-action: none prevents the mobile browser from scrolling the page when you try to drag the card */
+  touch-action: none; 
+  cursor: grab;
+}
+
+.deck-card:active {
+  cursor: grabbing;
+}
+
+.deck-label {
+  color: #666;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+}
+
+/* Shared Card Geometry */
+.card-scene {
+  width: 140px;
+  height: 242px;
+  perspective: 1000px;
+}
+
+@media (min-width: 400px) {
+  .card-scene { width: 165px; height: 285px; }
 }
 
 .card-object {
@@ -339,9 +431,7 @@ select {
   transform-style: preserve-3d;
 }
 
-.card-object.is-flipped {
-  transform: rotateY(180deg);
-}
+.card-object.is-flipped { transform: rotateY(180deg); }
 
 .card-face {
   position: absolute;
@@ -353,9 +443,8 @@ select {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+  box-shadow: -2px 4px 8px rgba(0, 0, 0, 0.6);
   border: 1px solid #2d2d2d;
-  box-sizing: border-box;
 }
 
 .card-back {
@@ -381,19 +470,9 @@ select {
   padding: 1.25rem;
   text-align: center;
   border: 4px double #d4af37;
+  cursor: pointer;
 }
 
-.card-numeral {
-  font-size: 1.1rem;
-  color: #7f6c44;
-  font-weight: 600;
-  margin-bottom: auto;
-}
-
-.card-title {
-  font-size: 1.25rem;
-  margin-bottom: auto;
-  font-weight: 500;
-  line-height: 1.3;
-}
+.card-numeral { font-size: 1.1rem; color: #7f6c44; font-weight: 600; margin-bottom: auto; }
+.card-title { font-size: 1.25rem; margin-bottom: auto; font-weight: 500; }
 </style>
