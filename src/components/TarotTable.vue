@@ -1,25 +1,40 @@
 <template>
   <div class="tarot-container">
     <header class="table-header">
-      <div class="upload-group">
-        <label class="btn btn-secondary btn-sm" for="zip-upload">
-          Upload Custom Deck (.zip)
-        </label>
-        <input type="file" id="zip-upload" accept=".zip" hidden @change="handleZipUpload" />
+      
+      <div class="controls-row">
+        <div class="selector-group">
+          <label for="deck-select">Deck:</label>
+          <select id="deck-select" v-model="activeDeckId" @change="resetTable">
+            <option v-for="deck in availableDecks" :key="deck.id" :value="deck.id">
+              {{ deck.name }}
+            </option>
+          </select>
+        </div>
+
+        <div class="upload-group" v-if="activeDeckId === 'zip'">
+          <label class="btn btn-secondary btn-sm" for="zip-upload">
+            Load ZIP into RAM
+          </label>
+          <input type="file" id="zip-upload" accept=".zip" hidden @change="handleZipUpload" />
+        </div>
       </div>
 
-      <div class="selector-group">
-        <label for="spread-select">Spread:</label>
-        <select id="spread-select" v-model="currentSpreadKey" @change="resetTable">
-          <option v-for="(spread, key) in spreads" :key="key" :value="key">
-            {{ spread.name }}
-          </option>
-        </select>
+      <div class="controls-row">
+        <div class="selector-group">
+          <label for="spread-select">Spread:</label>
+          <select id="spread-select" v-model="currentSpreadKey" @change="resetTable">
+            <option v-for="(spread, key) in spreads" :key="key" :value="key">
+              {{ spread.name }}
+            </option>
+          </select>
+        </div>
+        
+        <button class="btn btn-primary" :disabled="isShuffling" @click="animateShuffle">
+          {{ isShuffling ? 'Shuffling...' : 'Shuffle Deck' }}
+        </button>
       </div>
-      
-      <button class="btn btn-primary" :disabled="isShuffling" @click="animateShuffle">
-        {{ isShuffling ? 'Shuffling...' : 'Shuffle Deck' }}
-      </button>
+
     </header>
 
     <main class="table-surface">
@@ -42,7 +57,6 @@
 
             </div>
           </div>
-          
           <div v-else class="slot-placeholder"><span>Drop Here</span></div>
         </div>
       </div>
@@ -71,40 +85,48 @@
 <script setup>
 import { ref, computed } from 'vue';
 
-// --- Image Fallback Engine ---
+// --- Deck Configuration & Registry ---
+const availableDecks = [
+  { id: 'standard', name: 'Standard (Rider-Waite)' },
+  { id: 'vitoria', name: 'Vitoriushka' },
+  { id: 'my_template', name: 'WIP Template' },
+  { id: 'zip', name: 'Custom ZIP Upload' }
+];
 
-// 1. Store ZIP URLs in memory (Empty for now until we build JSZip)
+const activeDeckId = ref('standard');
 const customZipImages = ref({}); 
 
-// 2. The active template folder name inside public/decks/
-const activeTemplate = ref('my_template'); 
-
+// --- Image Fallback Engine ---
 const getCardImage = (cardId) => {
-  // Tier 1: User uploaded a ZIP and it contains this specific card ID
-  if (customZipImages.value[cardId]) {
-    return customZipImages.value[cardId];
+  // 1. If ZIP is selected, look in RAM first.
+  if (activeDeckId.value === 'zip') {
+    if (customZipImages.value[cardId]) {
+      return customZipImages.value[cardId]; // Return local blob URL
+    }
+    // If ZIP is selected but the card is missing (or not uploaded yet), fallback to standard
+    return `/decks/standard/${cardId}.webp`;
   }
-  
-  // Tier 2: Try the chosen template folder first (Served from Astro public folder)
-  // We assume .webp here, but if it fails, the @error handler catches it
-  return `/decks/${activeTemplate.value}/${cardId}.webp`;
+
+  // 2. If a folder deck is selected (e.g., 'vitoria'), request it directly.
+  return `/decks/${activeDeckId.value}/${cardId}.webp`;
 };
 
 const handleImageError = (event, cardId) => {
-  // Tier 3 (The Ultimate Fallback): If the template image 404s, swap to standard RWS
+  // 3. The Ultimate Fallback: If any folder image 404s, swap to standard.
   const standardFallback = `/decks/standard/${cardId}.webp`;
   
-  // Prevent infinite loops if the standard image is ALSO missing
+  // Prevent infinite loops if standard is ALSO somehow missing
   if (event.target.src.includes(standardFallback)) return; 
   
   event.target.src = standardFallback;
 };
 
 const handleZipUpload = (event) => {
-  console.log("File selected! We will hook up JSZip here next.");
+  console.log("ZIP Selected:", event.target.files[0]?.name);
+  // Next step: JSZip implementation goes here!
 };
 
-// --- Standard Deck Logic (Unchanged from previous step) ---
+// --- Standard Deck Logic (Unchanged) ---
 const majorArcana = [
   { id: '00', roman: '0', name: 'The Fool' }, { id: '01', roman: 'I', name: 'The Magician' },
   { id: '02', roman: 'II', name: 'The High Priestess' }, { id: '03', roman: 'III', name: 'The Empress' },
@@ -453,5 +475,21 @@ select { background: #262626; color: #d4af37; border: 1px solid #404040; padding
 .btn-sm {
   padding: 0.4rem 0.8rem;
   font-size: 0.85rem;
+}
+
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+@media (min-width: 600px) {
+  .controls-row {
+    width: auto;
+    justify-content: flex-start;
+  }
 }
 </style>
