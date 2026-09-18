@@ -1,18 +1,8 @@
 ---
-// Import your new Vue component
+import Layout from '../layouts/Layout.astro';
 import TarotTable from '../components/TarotTable.vue';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tarot</title>
-    <style>
-      body { margin: 0; padding: 0; background-color: #1a1a1a; }
-    </style>
-  </head>
-  <body>
-    <TarotTable client:load />
-  </body>
-</html>
+<Layout title="Tarot Table">
+  <TarotTable client:only="vue" />
+</Layout>

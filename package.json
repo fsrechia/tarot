@@ -6,12 +6,31 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "check": "astro check && vue-tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "verify": "npm run check && npm run test && npm run build",
+    "signaling": "node server/signaling/index.mjs",
+    "dev:all": "npm run signaling & astro dev"
   },
   "dependencies": {
     "@astrojs/vue": "^5.1.4",
     "astro": "^5.17.1",
+    "idb-keyval": "^6.3.0",
     "jszip": "^3.10.1",
-    "vue": "^3.5.38"
+    "vue": "^3.5.38",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@playwright/test": "^1.63.0",
+    "@vite-pwa/astro": "^1.2.0",
+    "@vue/test-utils": "^2.5.1",
+    "happy-dom": "^20.14.5",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1",
+    "vue-tsc": "^3.3.11"
   }
 }

@@ -1,0 +1,16 @@
+{
+  "id": "vitoria",
+  "name": "Vitoriushka",
+  "family": "tarot-major",
+  "cards": ["01","02","03","04","05","06","07","08","09"],
+  "hasBack": true,
+  "extension": "webp",
+  "fallbackDeckId": "standard",
+  "aspectRatio": 0.6,
+  "fit": "cover",
+  "credits": "Original artwork. Cards not yet painted fall back to the standard deck.",
+  "notes": {
+    "en": "A personal, hand-painted deck in a Van Gogh-inspired style: thick brushstrokes, swirling skies and warm lamplight. The scenes depict the querent's own life rather than classic Rider-Waite figures: cats, a wooden cabin, a partner, gardens and night walks. Read the imagery as intimate and domestic; the traditional meanings still apply.",
+    "pt-BR": "Um baralho pessoal pintado à mão em estilo inspirado em Van Gogh: pinceladas grossas, céus em espiral e luz quente de lampião. As cenas retratam a vida da própria consulente em vez das figuras clássicas de Rider-Waite: gatos, uma cabana de madeira, a pessoa amada, jardins e caminhadas noturnas. Leia as imagens como íntimas e domésticas; os significados tradicionais continuam valendo."
+  }
+}
