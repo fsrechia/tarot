@@ -12,7 +12,7 @@ async function openTable(browser: Browser, name: string): Promise<Page> {
     sessionStorage.setItem('e2e-initialised', '1');
     localStorage.setItem(
       'tarot.settings.v1',
-      JSON.stringify({ version: 1, locale: 'en', allowReversed: false, haptics: false, fanned: false, deckId: 'standard', spreadId: 'three', seenHelp: true, nickname: nick }),
+      JSON.stringify({ version: 1, locale: 'en', allowReversed: false, minorArcana: false, haptics: false, fanned: false, deckId: 'standard', spreadId: 'three', seenHelp: true, nickname: nick }),
     );
     localStorage.removeItem('tarot.table.v1');
   }, name);
@@ -96,9 +96,13 @@ test.describe('play together', () => {
     await expect(page.getByRole('alert')).toContainText('No table with that code', { timeout: 15_000 });
     await page.keyboard.press('Escape');
 
+    // A join link opened while the app is running is a hash-only navigation: the
+    // panel must open on `hashchange`, with the code filled in and the earlier
+    // error dismissed.
     await page.goto('/#join=abc234');
-    await page.reload(); // a hash-only navigation does not remount the app
     await expect(page.getByTestId('room-token-input')).toHaveValue('ABC234');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(new URL(page.url()).hash).toBe('');
     await page.context().close();
   });
 });

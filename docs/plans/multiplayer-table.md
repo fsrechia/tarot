@@ -121,6 +121,7 @@ Same code. On the same Wi-Fi, ICE finds host candidates and connects directly; t
 | 6. Custom deck artwork | Not transferred. Guests see the cards with their own selected deck. | Card ids are shared, art is local; sending MBs of blobs is a later feature. |
 | 7. Identity | Nickname only (saved in settings); server-assigned peer id; colour derived from the id. | No accounts. |
 | 8. Host leaves | Room closes; guests get "The host closed the room" and their own table back. No host migration. | v1 simplicity. |
+| Helper goes away | The table keeps running on the DataChannels. The host retries the helper (5 attempts, growing delays) and takes a **new code**; with guests connected the room survives even if the helper never returns (code unavailable, *Get a new code* button); alone, it closes. Guests ignore the helper's `closed` while their channel to the host is open. | The helper only brokers new joiners; a restart or a blip on the host's socket must not end a reading. |
 | 9. TURN | Not at launch. | Cost and a traffic-relaying component; revisit if users report failures. |
 | 10. Library | **Hand-rolled WebRTC** (`src/net/room.ts`, ~300 lines, no dependency). | Full control, tiny, testable in Playwright with loopback ICE. |
 | 11. Chat / voice | Not built. | Out of scope for v1. |
@@ -144,8 +145,8 @@ npm run test:e2e        # includes tests/e2e/multiplayer.spec.ts (two contexts, 
 Deploying: run the helper behind TLS (`wss://`) on any Node host (Fly.io, Railway, a VPS) and build with `PUBLIC_SIGNALING_URL=wss://…`. A Cloudflare Worker port is straightforward (Durable Object per room) but was not written.
 
 ### Known gaps
-- No reconnection: a dropped DataChannel ends the session for that guest (rejoin with the token). A `disconnected` connection gets 8 seconds to recover before it counts as dropped.
-- If the signaling helper goes away, the host's room closes (guests keep their last table). Keeping the room open without new joiners is a possible v2 change.
+- No automatic rejoin: a dropped DataChannel ends the session for that guest; the panel pre-fills the last code so rejoining is one tap. A `disconnected` connection gets 8 seconds to recover before it counts as dropped.
+- After the host recovers a new code, guests already at the table are not registered with the helper any more, so the helper's per-room guest cap only counts newcomers.
 - Guests behind symmetric NATs need TURN to reach a remote host.
 - The host's `allowReversed` setting is what applies to everyone's flips.
 - Guests see the host's chosen spread but keep their own deck artwork; a snapshot whose spread the guest's build does not know is ignored.

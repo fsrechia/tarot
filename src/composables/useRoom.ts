@@ -12,6 +12,8 @@ export type RoomUiStatus = 'idle' | 'connecting' | 'hosting' | 'joined' | 'error
 interface RoomState {
   status: RoomUiStatus;
   token: string | null;
+  /** The last code we hosted or joined with, so a dropped guest can rejoin in one tap. */
+  lastToken: string | null;
   peers: Peer[];
   me: Peer | null;
   error: string | null;
@@ -19,12 +21,14 @@ interface RoomState {
   held: Record<string, Peer>;
 }
 
-const state = reactive<RoomState>({ status: 'idle', token: null, peers: [], me: null, error: null, held: {} });
+const state = reactive<RoomState>({ status: 'idle', token: null, lastToken: null, peers: [], me: null, error: null, held: {} });
 const room = shallowRef<Room | null>(null);
+/** Bumped on every host/join/leave so a cancelled attempt cannot land later. */
+let attempt = 0;
 
 let onMessage: ((from: string, msg: Msg, r: Room) => void) | null = null;
 let onGuestReady: ((peer: Peer, r: Room) => void) | null = null;
-let onLeft: ((reason: string) => void) | null = null;
+let onLeft: ((reason: string, wasHost: boolean) => void) | null = null;
 
 function reset(status: RoomUiStatus, error: string | null = null) {
   state.status = status;
@@ -36,8 +40,13 @@ function reset(status: RoomUiStatus, error: string | null = null) {
   room.value = null;
 }
 
-function handlers() {
+function handlers(id: number) {
   return {
+    onToken: (token: string | null) => {
+      if (id !== attempt) return;
+      state.token = token;
+      if (token) state.lastToken = token;
+    },
     onMessage: (from: string, msg: Msg) => {
       if (msg.t === 'held') {
         const peer = state.peers.find((p) => p.id === msg.peerId);
@@ -56,47 +65,54 @@ function handlers() {
       if (room.value) onGuestReady?.(peer, room.value);
     },
     onClosed: (reason: string) => {
+      if (id !== attempt) return; // a room from a cancelled attempt
       const wasActive = state.status === 'hosting' || state.status === 'joined';
+      const wasHost = state.status === 'hosting';
       reset(reason === 'left' ? 'idle' : 'error', reason === 'left' ? null : reason);
-      if (wasActive) onLeft?.(reason);
+      if (wasActive) onLeft?.(reason, wasHost);
     },
   };
 }
 
+/** Shared by host() and join(): runs the attempt unless it was cancelled meanwhile. */
+async function connect(status: 'hosting' | 'joined', open: (id: number) => Promise<Room>) {
+  if (room.value) room.value.leave();
+  const id = ++attempt;
+  reset('connecting');
+  try {
+    const r = await open(id);
+    if (id !== attempt) {
+      r.leave(); // the user cancelled (or started another attempt) while this one was connecting
+      return;
+    }
+    room.value = r;
+    state.status = status;
+    state.token = r.token;
+    if (r.token) state.lastToken = r.token;
+    state.me = r.me;
+    state.peers = r.peers;
+  } catch (e) {
+    if (id === attempt) reset('error', (e as Error).message || 'unknown');
+  }
+}
+
 export function useRoom() {
-  const host = async (name: string) => {
-    if (room.value) room.value.leave();
-    reset('connecting');
-    try {
-      const r = await Room.host(name, handlers());
-      room.value = r;
-      state.status = 'hosting';
-      state.token = r.token;
-      state.me = r.me;
-      state.peers = r.peers;
-    } catch (e) {
-      reset('error', (e as Error).message || 'unknown');
-    }
-  };
+  const host = (name: string) => connect('hosting', (id) => Room.host(name, handlers(id)));
 
-  const join = async (token: string, name: string) => {
-    if (room.value) room.value.leave();
-    reset('connecting');
-    try {
-      const r = await Room.join(token, name, handlers());
-      room.value = r;
-      state.status = 'joined';
-      state.token = r.token;
-      state.me = r.me;
-      state.peers = r.peers;
-    } catch (e) {
-      reset('error', (e as Error).message || 'unknown');
-    }
-  };
+  const join = (token: string, name: string) => connect('joined', (id) => Room.join(token, name, handlers(id)));
 
+  /** Leaves the room, or cancels an attempt that is still connecting. */
   const leave = () => {
-    room.value?.leave();
-    reset('idle');
+    room.value?.leave(); // its onClosed resets the state and tells the table
+    attempt++;
+    if (state.status !== 'idle' && state.status !== 'error') reset('idle');
+  };
+
+  /** Host: ask the helper for a fresh code (after it was lost). */
+  const renewToken = async () => {
+    const r = room.value;
+    if (!r || state.status !== 'hosting') return false;
+    return r.renewToken();
   };
 
   const dismissError = () => {
@@ -123,6 +139,7 @@ export function useRoom() {
     host,
     join,
     leave,
+    renewToken,
     dismissError,
     setHandlers,
     heldBy,

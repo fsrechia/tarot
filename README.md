@@ -27,7 +27,7 @@ First-time e2e setup: `npx playwright install chromium`.
 
 ## How to play
 
-- **Tap the deck** to draw the next card into the next empty position (or onto the table in free mode).
+- **Tap the deck** to draw the next card into the next empty position (or onto the table in free mode). The deck has all 78 cards; More → *Minor Arcana* switches to a 22-card Major-only table (the minors are drawn a bit smaller and have their own back).
 - **Drag** a card from the deck or the table to a position or anywhere on the table. Drop it on the deck to return it.
 - **Tap a card** to flip it; tap again to turn it the other way up (reversed, or upright if it was dealt reversed); again to turn it face down.
 - **ⓘ or long-press** a face-up card to read its meaning (English / Português).
@@ -52,7 +52,8 @@ src/
   i18n/          UI strings (en, pt-BR)
   layouts/, pages/, styles/
 server/signaling/        tiny Node WebSocket helper that brokers WebRTC handshakes by token
-public/decks/<deckId>/   card images: 00.webp … 21.webp and back.webp
+public/decks/<deckId>/   card images: 00.webp … 21.webp, wands-01.webp … pentacles-king.webp, back.webp, back-minor.webp
+scripts/                 gen-minor-cards.mjs: generates the generic Minor Arcana fronts and minor backs
 src/decks/manifests/     one JSON per static deck (which cards it has, aspect ratio, fallback deck)
 src/assets/images/       original artwork sources (not shipped)
 tests/unit, tests/e2e    Vitest and Playwright
@@ -61,13 +62,13 @@ docs/                    bug reports, architecture, roadmap and feature plans
 
 ## Adding a deck
 
-1. Put `NN.webp` (00–21) and `back.webp` in `public/decks/<id>/`. A deck may be partial.
+1. Put `NN.webp` (00–21) and `back.webp` in `public/decks/<id>/`. A deck may be partial. Minor Arcana are optional: `<suit>-<rank>.webp` with suits `wands`, `cups`, `swords`, `pentacles` and ranks `01`–`10`, `page`, `knight`, `queen`, `king`, plus an optional `back-minor.webp` (set `"hasMinorBack": true`).
 2. Add `src/decks/manifests/<id>.json`:
    ```json
    { "id": "mydeck", "name": "My Deck", "family": "tarot-major", "cards": ["00","01"], "hasBack": true,
      "extension": "webp", "fallbackDeckId": "standard", "aspectRatio": 0.6, "fit": "cover", "credits": "…" }
    ```
-   Missing cards resolve to `fallbackDeckId` without 404s. It appears in the Deck menu automatically.
+   Missing cards (Minor Arcana included) resolve to `fallbackDeckId` without 404s; a missing minor back falls back to the deck's own back. It appears in the Deck menu automatically.
 
 Users can also import a deck at runtime from a ZIP (More → Import deck) — see [docs/plans/zip-deck-import.md](docs/plans/zip-deck-import.md).
 

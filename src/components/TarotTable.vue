@@ -31,7 +31,7 @@ import {
   type CardSize,
   type Point,
 } from '../engine/geometry';
-import { decksForFamily, findDeck, resolveImage, staticDecks } from '../decks/registry';
+import { decksForFamily, findDeck, resolveBack, resolveImage, staticDecks } from '../decks/registry';
 import { deleteCustomDeck, importZip, loadCustomDecks, revokeDeck, saveCustomDeck, toDeckDef } from '../decks/zip';
 import { useSettings } from '../composables/useSettings';
 import { useI18n } from '../composables/useI18n';
@@ -54,6 +54,9 @@ const deckId = ref(settings.deckId && findDeck(decks.value, settings.deckId) ? s
 const deck = computed(() => findDeck(decks.value, deckId.value) ?? decks.value[0]!);
 const imageFor = (key: string) => resolveImage(decks.value, deck.value, key);
 const cardsById = new Map(game.cards.map((c) => [c.id, c]));
+/** Minor Arcana cards have their own back (when the deck has one) and are drawn a bit smaller. */
+const backFor = (id: string) => resolveBack(decks.value, deck.value, cardsById.get(id));
+const scaleFor = (id: string) => cardsById.get(id)?.scale ?? 1;
 
 // ---------------------------------------------------------------------------
 // Spread + rules + table state
@@ -66,12 +69,20 @@ const spreadId = ref(
   knownSpread(saved?.spreadId) ? saved!.spreadId : knownSpread(settings.spreadId) ? settings.spreadId! : game.defaultSpreadId,
 );
 const spread = computed(() => game.spreads.find((s) => s.id === spreadId.value) ?? game.spreads[0]!);
-const rules = computed<GameRules>(() => ({ ...game.rules, allowReversed: settings.allowReversed }));
+const rules = computed<GameRules>(() => ({
+  ...game.rules,
+  allowReversed: settings.allowReversed,
+  minorArcana: settings.minorArcana,
+}));
 
 /** A fresh table using the current rules (settings can override the game defaults). */
 const newTable = () => createTable({ game: { ...game, rules: rules.value }, deckId: deckId.value, spread: spread.value });
 
-const initial: TableState = saved && isCompatible(saved, game, spread.value) ? saved : newTable();
+// Like the spread, the restored table decides whether the Minor Arcana are in
+// play; the setting only applies to the next new table.
+const restored = saved && isCompatible(saved, game, spread.value) ? saved : null;
+if (restored) settings.minorArcana = ops.usesMinorArcana(restored, game);
+const initial: TableState = restored ?? newTable();
 const tbl = useTable(initial);
 const state = tbl.state;
 
@@ -349,6 +360,19 @@ const onDeckChange = (id: string) => {
   tbl.state.value = { ...state.value, deckId: id };
 };
 
+/** With or without the 56 Minor Arcana: a new table, like changing the spread. */
+const toggleMinorArcana = () => {
+  if (roomApi.inRoom.value && !roomApi.isHost.value) return;
+  if (!confirmReset()) return;
+  settings.minorArcana = !settings.minorArcana;
+  if (roomApi.inRoom.value) {
+    dispatch({ k: 'newReading', spreadId: spreadId.value, seed: randomSeed() });
+  } else {
+    tbl.replace(newTable());
+  }
+  nextTick(fitView);
+};
+
 const toggleFan = () => {
   settings.fanned = !settings.fanned;
   vibrate(8);
@@ -414,7 +438,10 @@ roomApi.setHandlers({
     }
     // Guest: follow the host.
     if (msg.t === 'snapshot') {
-      if (!isValidState(msg.state, game)) return;
+      if (!isValidState(msg.state, game)) {
+        console.warn('snapshot rejected', msg.state);
+        return;
+      }
       tbl.state.value = msg.state;
       syncSpreadFromState();
     } else if (msg.t === 'effect' && msg.name === 'shuffle') {
@@ -424,7 +451,7 @@ roomApi.setHandlers({
   onGuestReady: (_peer: Peer, r: Room) => {
     r.send({ t: 'snapshot', state: state.value }, _peer.id);
   },
-  onLeft: (reason: string) => {
+  onLeft: (reason: string, wasHost: boolean) => {
     if (stashed) {
       tbl.setAutosave(true);
       spreadId.value = stashed.spreadId;
@@ -433,8 +460,14 @@ roomApi.setHandlers({
       nextTick(fitView);
     }
     roomNotice.value =
-      reason === 'left' ? t('room.left') : reason === 'room-expired' ? t('room.errExpired') : reason === 'host-left' ? t('room.errHostLeft') : t('room.errConnect');
-    setTimeout(() => (roomNotice.value = null), 4000);
+      reason === 'left'
+        ? t(wasHost ? 'room.ended' : 'room.left')
+        : reason === 'room-expired' || reason === 'signaling-lost'
+          ? t(wasHost ? 'room.errExpired' : 'room.errConnect')
+          : reason === 'host-left'
+            ? t('room.errHostLeft')
+            : t('room.errConnect');
+    setTimeout(() => (roomNotice.value = null), 5000);
   },
 });
 
@@ -457,6 +490,15 @@ watch(
 const openRoomPanel = (token = '') => {
   roomInitialToken.value = token;
   roomOpen.value = true;
+};
+
+/** `#join=CODE` in the URL opens the panel with the code filled in. Returns whether there was one. */
+const checkJoinLink = (): boolean => {
+  const m = /[#&]join=([A-Za-z0-9]{4,8})/.exec(location.hash);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  openRoomPanel(m[1]!.toUpperCase());
+  return true;
 };
 
 const inRoom = computed(() => roomApi.inRoom.value);
@@ -568,13 +610,10 @@ onMounted(async () => {
   await nextTick();
   fitView();
 
-  const joinMatch = /[#&]join=([A-Za-z0-9]{4,8})/.exec(location.hash);
-  if (joinMatch) {
-    history.replaceState(null, '', location.pathname + location.search);
-    openRoomPanel(joinMatch[1]!.toUpperCase());
-  } else if (!settings.seenHelp) {
-    helpOpen.value = true;
-  }
+  if (!checkJoinLink() && !settings.seenHelp) helpOpen.value = true;
+  // A join link opened while the app is already running (PWA, second tap on a
+  // shared link) changes only the hash and does not reload the page.
+  window.addEventListener('hashchange', checkJoinLink);
 
   const records = await loadCustomDecks();
   customDecks.value = records.map((r) => toDeckDef(r, 'standard'));
@@ -585,6 +624,7 @@ onBeforeUnmount(() => {
   roomApi.leave();
   observer?.disconnect();
   window.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('hashchange', checkJoinLink);
   customDecks.value.forEach(revokeDeck);
 });
 
@@ -609,6 +649,8 @@ const zoomPct = computed(() => Math.round(cam.camera.value.zoom * 100));
       :can-undo="tbl.canUndo.value && !inRoom"
       :can-redo="tbl.canRedo.value && !inRoom"
       :allow-reversed="settings.allowReversed"
+      :minor-arcana="settings.minorArcana"
+      :minor-arcana-locked="inRoom && !roomApi.isHost.value"
       :haptics="settings.haptics"
       :locale="settings.locale"
       :deck-is-custom="Boolean(deck.custom)"
@@ -625,6 +667,7 @@ const zoomPct = computed(() => Math.round(cam.camera.value.zoom * 100));
       @fit="fitView"
       @new-reading="newReading"
       @toggle-reversed="settings.allowReversed = !settings.allowReversed"
+      @toggle-minor="toggleMinorArcana"
       @toggle-haptics="settings.haptics = !settings.haptics"
       @set-locale="(loc: Locale) => (settings.locale = loc)"
       @import-zip="onImportZip"
@@ -644,6 +687,8 @@ const zoomPct = computed(() => Math.round(cam.camera.value.zoom * 100));
         :deck="deck"
         :transform="cam.transformStyle.value"
         :image-for="imageFor"
+        :back-for="backFor"
+        :scale-for="scaleFor"
         :dragging="dragging"
         :held="heldColors"
         @card-down="onCardDown"
@@ -655,7 +700,8 @@ const zoomPct = computed(() => Math.round(cam.camera.value.zoom * 100));
         :cards="state.deck"
         :fanned="settings.fanned"
         :card-size="cardSize"
-        :back-src="imageFor('back')"
+        :back-for="backFor"
+        :scale-for="scaleFor"
         :available-width="surfaceSize.width"
         :shuffling="shuffling"
         :scatter="scatter"
@@ -667,7 +713,7 @@ const zoomPct = computed(() => Math.round(cam.camera.value.zoom * 100));
       <div v-if="inRoom" class="room-banner ui" role="status">
         <button class="btn" type="button" data-testid="room-banner" @click="openRoomPanel()">
           <span class="dot" :style="{ background: roomApi.state.me?.color }"></span>
-          {{ t('room.banner', { n: roomApi.state.peers.length, token: roomApi.state.token ?? '' }) }}
+          {{ t('room.banner', { n: roomApi.state.peers.length, token: roomApi.state.token ?? '…' }) }}
         </button>
       </div>
       <div v-else-if="roomNotice" class="room-banner ui" role="status"><span class="notice">{{ roomNotice }}</span></div>
@@ -690,7 +736,8 @@ const zoomPct = computed(() => Math.round(cam.camera.value.zoom * 100));
       :card-size="cardSize"
       :zoom="cam.camera.value.zoom"
       :front-src="imageFor(dragCard.id)"
-      :back-src="imageFor('back')"
+      :back-src="backFor(dragCard.id)"
+      :scale="scaleFor(dragCard.id)"
       :fit="deck.fit"
       :alt="l(cardsById.get(dragCard.id)?.name)"
     />
@@ -701,7 +748,7 @@ const zoomPct = computed(() => Math.round(cam.camera.value.zoom * 100));
       :def="cardsById.get(detailCard.id)"
       :position-label="detailLabel"
       :front-src="imageFor(detailCard.id)"
-      :back-src="imageFor('back')"
+      :back-src="backFor(detailCard.id)"
       :fit="deck.fit"
       :has-prev="detailIndex > 0"
       :has-next="detailIndex >= 0 && detailIndex < readingOrder.length - 1"

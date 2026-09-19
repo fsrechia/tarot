@@ -135,6 +135,7 @@ export const tarotMajorArcana: CardDef[] = rows.map(
   ([id, en, pt, kwEn, kwPt, upEn, upPt, revEn, revPt], i) => ({
     id,
     number: i,
+    arcana: 'major',
     name: { en, 'pt-BR': pt },
     keywords: { en: kwEn, 'pt-BR': kwPt },
     meaning: {

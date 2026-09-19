@@ -9,6 +9,9 @@ import { seededRng } from '../engine/shuffle';
 
 export const PROTOCOL_VERSION = 1;
 
+/** Upper bound for cards in one `place` op (a full 78-card deck). */
+const MAX_PLACE = 78;
+
 export type Op =
   | { k: 'move'; from: Location; to: DropTarget }
   | { k: 'flip'; loc: Location }
@@ -114,7 +117,7 @@ export function isValidOp(v: unknown): v is Op {
     case 'place':
       return (
         Array.isArray(op.cards) &&
-        op.cards.length <= 22 &&
+        op.cards.length <= MAX_PLACE &&
         op.cards.every((c) => !!c && typeof c.id === 'string' && typeof c.reversed === 'boolean') &&
         !!op.fallback && isNum(op.fallback.x) && isNum(op.fallback.y)
       );
@@ -126,7 +129,8 @@ export function isValidOp(v: unknown): v is Op {
 }
 
 /**
- * Validation of a table snapshot from the host: every card of the game exactly
+ * Validation of a table snapshot from the host: exactly one of the game's card
+ * sets (with or without the Minor Arcana, whatever the host plays), each card
  * once, a known spread with the right number of slots, finite loose positions.
  */
 export function isValidState(v: unknown, game: GameDef): v is TableState {
@@ -136,16 +140,20 @@ export function isValidState(v: unknown, game: GameDef): v is TableState {
   if (!Array.isArray(s.deck) || !Array.isArray(s.slots) || !Array.isArray(s.loose) || !isNum(s.nextZ)) return false;
   const spread = game.spreads.find((sp) => sp.id === s.spreadId);
   if (!spread || spread.slots.length !== s.slots.length) return false;
-  const ids = new Set(game.cards.map((c) => c.id));
   const all = [...s.deck, ...s.loose, ...s.slots.filter((c) => c !== null)];
-  if (all.length !== ids.size) return false;
-  const seen = new Set<string>();
   for (const c of all) {
-    if (!c || !ids.has(c.id) || seen.has(c.id) || (c.face !== 'up' && c.face !== 'down') || typeof c.reversed !== 'boolean') return false;
-    seen.add(c.id);
+    if (!c || typeof c.id !== 'string' || (c.face !== 'up' && c.face !== 'down') || typeof c.reversed !== 'boolean') return false;
   }
+  if (!table.isCardSet(all.map((c) => c.id), game)) return false;
   return s.loose.every((c) => isNum(c.x) && isNum(c.y) && isNum(c.z));
 }
+
+const isPeer = (v: unknown): v is Peer => {
+  if (!v || typeof v !== 'object') return false;
+  const p = v as Peer;
+  return typeof p.id === 'string' && p.id.length <= 32 && typeof p.name === 'string' && p.name.length <= 32 && /^#[0-9a-f]{6}$/i.test(p.color);
+};
+const isPeerList = (v: unknown): v is Peer[] => Array.isArray(v) && v.length <= 16 && v.every(isPeer);
 
 export function isValidMsg(v: unknown): v is Msg {
   if (!v || typeof v !== 'object') return false;
@@ -154,9 +162,9 @@ export function isValidMsg(v: unknown): v is Msg {
     case 'hello':
       return typeof m.name === 'string';
     case 'welcome':
-      return !!m.you && Array.isArray(m.peers);
+      return isPeer(m.you) && isPeerList(m.peers);
     case 'peers':
-      return Array.isArray(m.peers);
+      return isPeerList(m.peers);
     case 'snapshot':
       return !!m.state;
     case 'op':

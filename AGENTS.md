@@ -13,11 +13,12 @@ A browser tarot table (Astro + Vue 3 + TypeScript, static output, PWA) built on 
 3. **Gestures go through `usePointerDrag` / `useCamera`.** Never attach `@click` and `@pointerdown` to the same card (that was bug B1). Every pointer listener must handle `pointercancel` and be removed on unmount.
 4. **Coordinates**: card positions are card units (`x` in card widths, `y` in card heights, centre-anchored). Screen ↔ canvas conversion is in `src/engine/geometry.ts`; do not hard-code card pixel sizes (bug B3). Card size is the `--card-w` / `--card-h` CSS variables.
 5. **Mobile first.** Anything new must work at 360×640 with `touch-action: none`, respect `env(safe-area-inset-*)`, and not rely on hover. Test with Playwright's phone projects.
-6. **Strings are localized.** UI text goes in `src/i18n/index.ts` (`en` and `pt-BR`, both required — the unit test enforces key parity). Card text goes in `src/decks/tarot-major.ts`.
+6. **Strings are localized.** UI text goes in `src/i18n/index.ts` (`en` and `pt-BR`, both required — the unit test enforces key parity). Card text goes in `src/decks/tarot-major.ts` and `src/decks/tarot-minor.ts`.
 7. **Persistence formats are versioned.** `tarot.table.v1`, `tarot.settings.v1`, IndexedDB stores `tarot/decks` and `tarot-ai/interpretations` (`version: 1` on each record; deck records imported before the field existed have none and are still accepted). The OpenRouter key lives alone in `tarot.ai.key`. Bump the version and write a migration (or a compatibility check) when the shape changes; a new *optional* field (like `TableCard.turned`) may be added without a bump as long as every reader treats its absence as the old behaviour.
 8. **The component is client-only** (`client:only="vue"`): it reads localStorage in setup. Do not switch it to `client:load`.
 9. **Every table action is an `Op`** (`src/net/protocol.ts`) dispatched through `TarotTable.dispatch`, never a direct `tbl.commit` — that is what keeps single-player, host and guest paths identical. New actions: add the op, its `applyOp` case, its validator and a unit test.
-10. **Images are not our job right now.** `todo.md` lists artwork still to be painted; the app must degrade gracefully via the deck fallback chain.
+10. **Images are not our job right now.** `todo.md` lists artwork still to be painted; the app must degrade gracefully via the deck fallback chain. The Minor Arcana fronts are generated placeholders (`scripts/gen-minor-cards.mjs`); do not hand-edit them.
+12. **A table's cards are one of the game's card sets** (`cardSets` in `src/engine/table.ts`: with or without the Minor Arcana). Anything that validates or restores a `TableState` must use `isCardSet`, never compare against `game.cards` directly.
 11. **The AI reader only sees what is face up.** Everything sent to the model goes through `buildReadingInput` in `src/ai/prompts.ts`; do not send the table state or face-down card ids anywhere else. Model output is untrusted text: render it only through `src/ai/markdown.ts`.
 
 ## Commands
@@ -36,10 +37,11 @@ npm run test:e2e     # playwright (needs: npx playwright install chromium)
 | `src/engine/table.ts` | create/shuffle/move/flip/draw/deal/reveal/gather |
 | `src/engine/shuffle.ts` | Fisher–Yates over the CSPRNG; `seededRng` for reproducible/shared shuffles |
 | `src/engine/geometry.ts` | camera math, bounds, fit-to-viewport, unit conversions |
-| `src/games/tarot.ts`, `src/spreads/tarot.ts`, `src/decks/tarot-major.ts` | the tarot `GameDef`, its spreads, and the 22 cards' names/keywords/meanings |
+| `src/games/tarot.ts`, `src/spreads/tarot.ts`, `src/decks/tarot-major.ts`, `src/decks/tarot-minor.ts` | the tarot `GameDef`, its spreads, and the 22 + 56 cards' names/keywords/meanings (`rules.minorArcana` leaves the minors out) |
 | `src/composables/useTable.ts` | reactive state + undo/redo (`commit` / `amend` / `replace`) + autosave |
 | `src/composables/useSettings.ts` | `tarot.settings.v1` reactive singleton (locale, rules, deck, spread, nickname, AI prefs) |
 | `src/composables/useI18n.ts`, `src/i18n/index.ts` | `t()` for UI strings, `l()` for `Localized` data; the string tables |
+| `src/composables/useClipboard.ts` | `copyText()` with the legacy fallback for plain-http (LAN) pages — use it instead of `navigator.clipboard` |
 | `src/composables/useCamera.ts` | pan / pinch / wheel zoom, pointer bookkeeping on `window` |
 | `src/composables/usePointerDrag.ts` | tap / long-press / drag recogniser |
 | `src/components/TarotTable.vue` | orchestrator: wires the above, resolves drops, toolbar actions, `dispatch(op)` |
@@ -47,7 +49,8 @@ npm run test:e2e     # playwright (needs: npx playwright install chromium)
 | `src/components/Card.vue`, `DragGhost.vue` | one card face (flip / reversed animation); the card that follows the pointer |
 | `src/components/DeckDrawer.vue` | stack / fan / shuffle animation |
 | `src/components/Toolbar.vue`, `CardDetail.vue`, `HelpPanel.vue`, `RoomPanel.vue` | toolbar + "more" menu; card meaning sheet; first-run help; Play together |
-| `src/decks/registry.ts` | static deck manifests, image URL resolution with fallback chain |
+| `src/decks/registry.ts` | static deck manifests, image URL resolution with fallback chain (`resolveBack`: minor back → regular back) |
+| `scripts/gen-minor-cards.mjs` | generates the generic Minor Arcana fronts and the minor backs into `public/decks/` (output is committed) |
 | `src/decks/zip.ts` | ZIP import → IndexedDB → DeckDef with blob URLs |
 | `src/net/protocol.ts` | `Op` (every table action), `applyOp`, message validation |
 | `src/net/room.ts` | WebRTC star around the host; `src/net/signaling.ts` talks to `server/signaling/` |

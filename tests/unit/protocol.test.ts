@@ -28,6 +28,11 @@ describe('protocol validation', () => {
     expect(isValidMsg({ t: 'op', op: { k: 'bogus' } })).toBe(false);
     expect(isValidMsg({ t: 'holding', loc: null })).toBe(true);
     expect(isValidMsg({ t: 'unknown' })).toBe(false);
+    // Peer lists come from the host and end up in styles and labels: shape-checked.
+    const peer = { id: 'g1', name: 'Bea', color: '#6fc2e0' };
+    expect(isValidMsg({ t: 'welcome', v: 1, you: peer, peers: [peer] })).toBe(true);
+    expect(isValidMsg({ t: 'peers', peers: [{ ...peer, color: 'url(x)' }] })).toBe(false);
+    expect(isValidMsg({ t: 'welcome', v: 1, you: { id: 'g1' }, peers: [] })).toBe(false);
   });
 
   it('validates snapshots against the game', () => {
@@ -78,7 +83,7 @@ describe('applyOp', () => {
     s = applyOp(s, { k: 'move', from: { kind: 'slot', index: 1 }, to: { kind: 'deck' } }, ctx);
     expect(s.slots[1]).toBeNull();
     s = applyOp(s, { k: 'gather' }, ctx);
-    expect(s.deck).toHaveLength(22);
+    expect(s.deck).toHaveLength(tarotGame.cards.length);
   });
 
   it('ignores newReading for an unknown spread', () => {

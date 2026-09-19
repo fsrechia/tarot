@@ -12,7 +12,7 @@ async function open(page: Page, extra: Record<string, unknown> = {}) {
     sessionStorage.setItem('e2e-initialised', '1');
     localStorage.setItem(
       'tarot.settings.v1',
-      JSON.stringify({ version: 1, locale: 'en', allowReversed: false, haptics: false, fanned: false, deckId: 'standard', spreadId: 'three', seenHelp: true, ...extra }),
+      JSON.stringify({ version: 1, locale: 'en', allowReversed: false, minorArcana: false, haptics: false, fanned: false, deckId: 'standard', spreadId: 'three', seenHelp: true, ...extra }),
     );
     localStorage.removeItem('tarot.table.v1');
     localStorage.removeItem('tarot.ai.key');

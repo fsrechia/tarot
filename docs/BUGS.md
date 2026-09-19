@@ -175,6 +175,40 @@ Format: environment · steps · expected · actual · root cause · fix.
 - Imported deck records now carry `version: 1` as the conventions promise (older records without it still load).
 - Starting to host clears the local undo history, which no longer matches the shared table (ops bypass it), so undo after the room ends cannot jump to a pre-room state.
 
+## Third round (usability + networking)
+
+## B32 — Cancel while connecting did nothing  ·  **Fixed**
+
+- **Steps**: Join with a code, press *Cancel* while "Connecting…" is shown.
+- **Actual**: the panel went idle but the in-flight join carried on; when it completed you were silently at the host's table (or an error appeared later).
+- **Root cause**: `useRoom` only created the `Room` after `Room.join` resolved, so there was nothing to cancel.
+- **Fix**: every host/join attempt carries an id; `leave()` bumps it, and an attempt that completes with a stale id leaves the room it just made. Unit-tested with a mocked `Room`.
+
+## B33 — Losing the helper ended a live game  ·  **Fixed**
+
+- **Actual**: if the signaling helper restarted, expired the room, or the host's socket to it dropped for a moment, the host's room closed (and, through the helper's `closed` broadcast, every guest left too) although every DataChannel was healthy.
+- **Fix**: the helper is only needed for *new* joiners. The host now retries the helper with growing delays (5 attempts, ~30 s) and takes a fresh code; meanwhile the panel says "Reconnecting…" and offers *Get a new code*. If it never comes back, the room stays open as long as someone is connected (code unavailable), and closes only when the host is alone. Guests ignore the helper's `closed` while their channel to the host is open; the host still says `bye` over the channel when it really leaves.
+
+## B34 — Copy link failed silently on a LAN address  ·  **Fixed**
+
+- **Environment**: the app opened from `http://192.168.x.x` (how you play on the same Wi-Fi).
+- **Root cause**: the async clipboard API only exists in secure contexts; the failure was swallowed.
+- **Fix**: `copyText()` falls back to a hidden textarea + `execCommand('copy')`, the join link is shown in a selectable field, there is a *Copy code* button, and a failure is reported. The Ask panel's transcript copy uses the same path.
+
+## B35 — Join links needed a reload; stale errors greeted the next opening  ·  **Fixed**
+
+- A `#join=CODE` link opened while the app was already running only changed the hash. A `hashchange` listener now opens the panel. Closing the panel dismisses a room error, and after a dropped connection the last code is pre-filled so rejoining is one tap.
+
+## B36 — Hardening around peers and the helper  ·  **Fixed**
+
+- Peer lists from the host are shape-checked (ids and names bounded, colours must be `#rrggbb`) before they reach `aria-label`s and inline styles.
+- DataChannel messages above 64 KB are ignored before parsing; a failing offer drops that guest instead of surfacing an unhandled rejection; a pending helper request rejects immediately when the socket closes rather than after its timeout.
+
+## B37 — Ask panel details  ·  **Fixed**
+
+- The dream "suggest cards" request now aborts when the panel closes, so cards cannot land after the user has moved on. `Ctrl/⌘+Enter` in the question box interprets.
+- The host's own notice on ending a room said "Your own table is back"; it now says "Room ended".
+
 ---
 
 ## Known limitations (not bugs, tracked in ROADMAP)
@@ -182,5 +216,5 @@ Format: environment · steps · expected · actual · root cause · fix.
 - Long-press to open card details conflicts with nothing today, but if a future feature adds a context menu it must share the recogniser.
 - `window.confirm` / `window.alert` are used for the two confirmations; a styled dialog is in `plans/settings-and-themes.md`.
 - Precache includes every deck image (~9.5 MB) so the app works fully offline after first load; a smarter strategy is in `plans/pwa-offline.md`.
-- If the signaling helper restarts, the host's room closes (guests keep their last table); reconnection and host migration are listed in `plans/multiplayer-table.md`.
+- A guest whose DataChannel drops must rejoin (the code is pre-filled); automatic rejoin and host migration are listed in `plans/multiplayer-table.md`.
 - The helper trusts `X-Forwarded-For` for rate limiting; deploy it behind a proxy that sets that header, or directly exposed clients can spoof it.

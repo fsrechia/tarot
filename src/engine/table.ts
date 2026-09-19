@@ -3,6 +3,7 @@
  * mutates its input, which makes undo/redo, persistence and testing trivial.
  */
 import type {
+  CardDef,
   DropTarget,
   GameDef,
   GameRules,
@@ -22,9 +23,41 @@ export interface CreateTableOptions {
   rng?: Rng;
 }
 
-/** Fresh, shuffled table with every card in the deck. */
+/** The cards a game puts in play under the given rules (Minor Arcana can be left out). */
+export function activeCards(game: GameDef, rules: GameRules): CardDef[] {
+  return rules.minorArcana === false ? game.cards.filter((c) => c.arcana !== 'minor') : game.cards;
+}
+
+/** The sets of card ids a table of this game may consist of: every card, or every card but the minors. */
+export function cardSets(game: GameDef): Set<string>[] {
+  const all = game.cards.map((c) => c.id);
+  const majors = game.cards.filter((c) => c.arcana !== 'minor').map((c) => c.id);
+  const sets = [new Set(all)];
+  if (majors.length !== all.length) sets.push(new Set(majors));
+  return sets;
+}
+
+/** True when `ids` is exactly one of the game's card sets (each card once). */
+export function isCardSet(ids: readonly string[], game: GameDef): boolean {
+  const seen = new Set(ids);
+  if (seen.size !== ids.length) return false;
+  return cardSets(game).some((set) => set.size === seen.size && ids.every((id) => set.has(id)));
+}
+
+/** Every card on the table, wherever it is. */
+export function allCards(state: TableState): TableCard[] {
+  return [...state.deck, ...state.slots.filter((c): c is TableCard => c !== null), ...state.loose];
+}
+
+/** Whether the table was created with the Minor Arcana in play. */
+export function usesMinorArcana(state: TableState, game: GameDef): boolean {
+  const minors = new Set(game.cards.filter((c) => c.arcana === 'minor').map((c) => c.id));
+  return allCards(state).some((c) => minors.has(c.id));
+}
+
+/** Fresh, shuffled table with every card in play in the deck. */
 export function createTable({ game, deckId, spread, rng = cryptoRandom }: CreateTableOptions): TableState {
-  const cards: TableCard[] = game.cards.map((c) => ({ id: c.id, face: 'down', reversed: false }));
+  const cards: TableCard[] = activeCards(game, game.rules).map((c) => ({ id: c.id, face: 'down', reversed: false }));
   const state: TableState = {
     version: 1,
     gameId: game.id,

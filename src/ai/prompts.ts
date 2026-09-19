@@ -175,7 +175,7 @@ export function suggestCardsMessages(o: {
 }): ChatMessage[] {
   const list = o.available.map((c) => `${c.id}: ${pick('en', c.name)} (${pickList('en', c.keywords).join(', ')})`).join('\n');
   const system = [
-    'You map dreams to tarot Major Arcana. Reply with JSON only: {"cards":[{"id":"17","reversed":false}]}.',
+    'You map dreams to tarot cards. Reply with JSON only: {"cards":[{"id":"17","reversed":false}]}.',
     `Pick exactly ${o.count} distinct cards from the available list whose symbolism resonates most with the dream, ordered from most to least central.`,
     o.allowReversed ? 'Set "reversed": true only when the dream shows the card’s energy blocked, inverted or excessive.' : 'Always set "reversed": false.',
     'Available cards (id: name (keywords)):',

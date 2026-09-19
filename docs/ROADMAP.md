@@ -15,13 +15,13 @@ Priorities after the mobile-first refactor. Effort: S (≤1 day), M (2–4 days)
 | 7 | **Settings & themes** (table cloth, card size, sounds, styled dialogs) | S–M | Polish | [plans/settings-and-themes.md](plans/settings-and-themes.md) |
 | 8 | **Accessibility pass** (keyboard moves, announcements) | M | Playable by everyone | [plans/accessibility.md](plans/accessibility.md) |
 | 9 | **PWA polish** (smarter caching, update toast, install prompt) | S | Offline is there; make it graceful | [plans/pwa-offline.md](plans/pwa-offline.md) |
-| 10 | **Minor Arcana** (78-card deck) | M | Most tarot users expect it; needs artwork | [plans/new-game-template.md](plans/new-game-template.md) |
+| 10 | **Minor Arcana** (78-card deck) — **v1 shipped** (generic placeholder art, per-deck minor backs, Major-only toggle); v2: real RWS scans, better fan for 78 cards | M | Most tarot users expect it | [plans/minor-arcana.md](plans/minor-arcana.md) |
 | 11 | **New games** (Lenormand, oracle decks, playing-card solitaire) | M each | The engine's raison d'être | [plans/new-game-template.md](plans/new-game-template.md) |
 | 12 | **ZIP deck import** — already built; polish only (drag-and-drop a ZIP, deck cover, share) | S | Lowest priority per maintainer | [plans/zip-deck-import.md](plans/zip-deck-import.md) |
 
 Related design notes: [shuffle entropy](plans/shuffle-entropy.md).
 
-Also shipped and documented: [card detail & meanings](plans/card-detail-and-meanings.md), [undo/redo](plans/undo-redo.md), [i18n](plans/i18n.md), [testing & CI](plans/testing-and-ci.md), [ZIP deck import](plans/zip-deck-import.md), [PWA/offline baseline](plans/pwa-offline.md). Bug history: [BUGS.md](BUGS.md).
+Also shipped and documented: [Minor Arcana](plans/minor-arcana.md), [card detail & meanings](plans/card-detail-and-meanings.md), [undo/redo](plans/undo-redo.md), [i18n](plans/i18n.md), [testing & CI](plans/testing-and-ci.md), [ZIP deck import](plans/zip-deck-import.md), [PWA/offline baseline](plans/pwa-offline.md). Bug history: [BUGS.md](BUGS.md).
 
 ## Small improvements (backlog)
 

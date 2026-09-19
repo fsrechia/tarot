@@ -55,6 +55,8 @@ export class SignalingClient {
       };
       ws.onclose = () => {
         this.ws = null;
+        // A pending request() must not sit until its timeout when the socket is gone.
+        for (const l of this.listeners) l({ t: 'error', code: 'signaling-lost' });
         this.onClose?.();
       };
     });

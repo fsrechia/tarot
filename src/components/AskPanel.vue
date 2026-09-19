@@ -9,6 +9,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { CardDef, DeckDef, Location, SpreadDef, TableState } from '../engine/types';
 import { useI18n } from '../composables/useI18n';
 import { useSettings } from '../composables/useSettings';
+import { copyText } from '../composables/useClipboard';
 import { AiError, chat, getApiKey, maskKey, setApiKey, type ChatMessage } from '../ai/openrouter';
 import {
   buildReadingInput,
@@ -107,9 +108,10 @@ const streaming = ref(false);
 const partial = ref('');
 const error = ref<string | null>(null);
 const followUp = ref('');
-const copied = ref(false);
+const copied = ref<'yes' | 'failed' | null>(null);
 const suggesting = ref(false);
 let controller: AbortController | null = null;
+let suggestController: AbortController | null = null;
 let pending = '';
 let raf = 0;
 
@@ -254,6 +256,7 @@ const suggest = async () => {
   error.value = null;
   const available = props.state.deck.map((c) => props.cardsById.get(c.id)).filter((c): c is CardDef => !!c);
   const count = Math.min(freeRoom.value, available.length);
+  suggestController = new AbortController();
   try {
     const res = await chat({
       apiKey: apiKey.value,
@@ -261,14 +264,17 @@ const suggest = async () => {
       messages: suggestCardsMessages({ dream: question.value, count, available, locale: locale.value, allowReversed: props.allowReversed }),
       maxTokens: 300,
       temperature: 0.4,
+      signal: suggestController.signal,
     });
     const cards = parseSuggestedCards(res.text, new Set(available.map((c) => c.id)), count);
     if (!cards.length) error.value = t('ask.errSuggest');
     else emit('place-cards', cards);
   } catch (e) {
-    error.value = errorText(e) || t('ask.errSuggest');
+    const msg = errorText(e); // '' when aborted (panel closed): nothing to show
+    if (msg) error.value = msg;
   } finally {
     suggesting.value = false;
+    suggestController = null;
   }
 };
 
@@ -290,13 +296,8 @@ const transcript = () => {
   return lines.filter((x, i) => x !== '' || i === 2).join('\n');
 };
 const copy = async () => {
-  try {
-    await navigator.clipboard.writeText(transcript());
-    copied.value = true;
-    setTimeout(() => (copied.value = false), 1500);
-  } catch {
-    /* clipboard unavailable */
-  }
+  copied.value = (await copyText(transcript())) ? 'yes' : 'failed';
+  setTimeout(() => (copied.value = null), 1800);
 };
 const share = async () => {
   try {
@@ -342,6 +343,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('online', setOnline);
   window.removeEventListener('offline', setOnline);
   stop();
+  suggestController?.abort(); // a card suggestion must not land after the panel is gone
   if (raf) cancelAnimationFrame(raf);
 });
 watch(mode, () => {
@@ -405,6 +407,8 @@ watch(mode, () => {
               maxlength="2000"
               :placeholder="mode === 'dream' ? t('ask.dreamPlaceholder') : t('ask.questionPlaceholder')"
               data-testid="ask-question"
+              @keydown.ctrl.enter.prevent="interpret"
+              @keydown.meta.enter.prevent="interpret"
             ></textarea>
           </label>
 
@@ -462,7 +466,7 @@ watch(mode, () => {
             <div class="row between">
               <span class="hint small">{{ t('ask.saved') }}</span>
               <span class="row tight">
-                <button class="btn" type="button" @click="copy">{{ copied ? t('ask.copied') : t('ask.copy') }}</button>
+                <button class="btn" type="button" @click="copy">{{ copied === 'yes' ? t('ask.copied') : copied === 'failed' ? t('ask.copyFailed') : t('ask.copy') }}</button>
                 <button v-if="canShare" class="btn" type="button" @click="share">{{ t('ask.share') }}</button>
                 <button class="btn" type="button" data-testid="ask-new" @click="newThread">{{ t('ask.newThread') }}</button>
               </span>

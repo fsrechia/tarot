@@ -17,6 +17,8 @@ export interface RoomHandlers {
   onPeers: (peers: Peer[]) => void;
   /** A guest's channel is open and it said hello (host only). */
   onGuestReady?: (peer: Peer) => void;
+  /** Host only: the join code changed. `null` while the helper is unreachable (nobody new can join). */
+  onToken?: (token: string | null) => void;
   onClosed: (reason: string) => void;
 }
 
@@ -24,6 +26,13 @@ const ICE_SERVERS: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:19302', 's
 const CONNECT_TIMEOUT_MS = 20_000;
 /** How long a `disconnected` connection may try to recover before it is dropped. */
 const DISCONNECT_GRACE_MS = 8_000;
+/** Host: attempts to get back to the helper after losing it, and the growing delay between them. */
+const RECOVER_ATTEMPTS = 5;
+const RECOVER_DELAY_MS = 2_000;
+/** Anything larger than this on a DataChannel is not a table message (a snapshot is ~2 KB). */
+const MAX_MESSAGE_CHARS = 64 * 1024;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 interface Link {
   pc: RTCPeerConnection;
@@ -35,26 +44,35 @@ interface Link {
 
 export class Room {
   readonly isHost: boolean;
-  readonly token: string;
+  /** The join code. Host: `null` while the helper is unreachable (see `renewToken`). */
+  token: string | null;
   readonly me: Peer;
   status: RoomStatus = 'connecting';
   private links = new Map<string, Link>();
   /** Guest side: the peer list as last announced by the host. */
   private remotePeers: Peer[] | null = null;
   private handlers: RoomHandlers;
-  private signaling: SignalingClient;
-  private offSignaling: () => void;
+  private signaling!: SignalingClient;
+  private offSignaling: () => void = () => {};
+  private signalingUrl: string | undefined;
+  private recovering = false;
 
-  private constructor(isHost: boolean, token: string, me: Peer, signaling: SignalingClient, handlers: RoomHandlers) {
+  private constructor(isHost: boolean, token: string, me: Peer, signaling: SignalingClient, handlers: RoomHandlers, signalingUrl?: string) {
     this.isHost = isHost;
     this.token = token;
     this.me = me;
-    this.signaling = signaling;
     this.handlers = handlers;
+    this.signalingUrl = signalingUrl;
+    this.attachSignaling(signaling);
+  }
+
+  private attachSignaling(signaling: SignalingClient): void {
+    this.signaling = signaling;
     this.offSignaling = signaling.on((e) => this.onSignaling(e));
     signaling.onClose = () => {
-      // Guests keep playing over the DataChannel; the host needs signaling for new joiners.
-      if (this.isHost && this.status !== 'closed') this.close('signaling-lost');
+      // Guests keep playing over the DataChannel. The host needs the helper
+      // only for new joiners, so the game goes on while it tries to get back.
+      if (this.isHost && this.status !== 'closed') void this.recoverSignaling('signaling-lost');
     };
   }
 
@@ -63,7 +81,7 @@ export class Room {
     const signaling = new SignalingClient(signalingUrl);
     await signaling.connect();
     const created = await signaling.request({ t: 'create' }, 'created');
-    const room = new Room(true, created.token, { id: 'host', name, color: colorFor('host') }, signaling, handlers);
+    const room = new Room(true, created.token, { id: 'host', name, color: colorFor('host') }, signaling, handlers, signalingUrl);
     room.status = 'open';
     return room;
   }
@@ -74,7 +92,7 @@ export class Room {
     await signaling.connect();
     const joined = await signaling.request({ t: 'join', token, name }, 'joined');
     const me: Peer = { id: joined.peerId, name, color: colorFor(joined.peerId) };
-    const room = new Room(false, token.toUpperCase(), me, signaling, handlers);
+    const room = new Room(false, token.toUpperCase(), me, signaling, handlers, signalingUrl);
     try {
       await room.waitForHostChannel();
     } catch (e) {
@@ -110,6 +128,71 @@ export class Room {
     this.close('left');
   }
 
+  /** Guests whose DataChannel is open (host only). */
+  get connectedGuests(): number {
+    let n = 0;
+    for (const l of this.links.values()) if (l.channel?.readyState === 'open') n++;
+    return n;
+  }
+
+  /**
+   * Host: (re)connects to the helper and takes a fresh join code. Used after
+   * the helper restarted or expired the room; the guests already at the table
+   * are unaffected. Resolves false when the helper cannot be reached.
+   */
+  async renewToken(): Promise<boolean> {
+    if (!this.isHost || this.status === 'closed') return false;
+    const signaling = new SignalingClient(this.signalingUrl);
+    try {
+      await signaling.connect();
+      const created = await signaling.request({ t: 'create' }, 'created');
+      if (this.closed) {
+        signaling.close();
+        return false;
+      }
+      this.offSignaling();
+      this.signaling.close();
+      this.attachSignaling(signaling);
+      this.setToken(created.token);
+      return true;
+    } catch {
+      signaling.close();
+      return false;
+    }
+  }
+
+  /** Read after an await, where TypeScript would otherwise assume `status` cannot have changed. */
+  private get closed(): boolean {
+    return (this.status as RoomStatus) === 'closed';
+  }
+
+  private setToken(token: string | null): void {
+    if (this.token === token) return;
+    this.token = token;
+    this.handlers.onToken?.(token);
+  }
+
+  /**
+   * Host: the helper went away (socket lost, or it expired the room). Retry
+   * with growing delays; with guests connected the table stays open even if
+   * every attempt fails (the code just stays unavailable), alone it closes.
+   */
+  private async recoverSignaling(reason: string): Promise<void> {
+    if (this.recovering) return;
+    this.recovering = true;
+    this.setToken(null);
+    try {
+      for (let i = 0; i < RECOVER_ATTEMPTS && !this.closed; i++) {
+        await sleep(RECOVER_DELAY_MS * (i + 1));
+        if (this.closed) return;
+        if (await this.renewToken()) return;
+      }
+      if (!this.closed && this.connectedGuests === 0) this.close(reason);
+    } finally {
+      this.recovering = false;
+    }
+  }
+
   private close(reason: string): void {
     if (this.status === 'closed') return;
     this.status = 'closed';
@@ -135,7 +218,7 @@ export class Room {
   private onSignaling(e: SignalingEvent): void {
     switch (e.t) {
       case 'peer-joined':
-        if (this.isHost) void this.offerTo(e.peerId, e.name);
+        if (this.isHost) void this.offerTo(e.peerId, e.name).catch(() => this.dropLink(e.peerId));
         break;
       case 'peer-left':
         // Once the DataChannel is open the helper is out of the loop for this
@@ -149,8 +232,12 @@ export class Room {
         });
         break;
       case 'closed':
-        // The helper closed the room: the host left (guests) or it expired (host).
-        this.close(this.isHost ? 'room-expired' : 'host-left');
+        // The helper closed the room. Host: it expired, get a new code. Guest:
+        // the host left, unless our channel to it is still open, in which case
+        // only the host's *signaling* socket dropped (the helper cannot tell the
+        // difference) and the host says `bye` over the channel if it really goes.
+        if (this.isHost) void this.recoverSignaling('room-expired');
+        else if (this.links.get('host')?.channel?.readyState !== 'open') this.close('host-left');
         break;
       case 'error':
         break;
@@ -265,6 +352,7 @@ export class Room {
   }
 
   private onChannelMessage(peerId: string, link: Link, raw: string): void {
+    if (raw.length > MAX_MESSAGE_CHARS) return;
     let msg: unknown;
     try {
       msg = JSON.parse(raw);

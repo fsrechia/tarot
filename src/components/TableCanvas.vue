@@ -3,7 +3,6 @@
  * The zoomable table: spread slots (drop targets), placed cards and loose
  * cards, positioned from spread data in card units.
  */
-import { computed } from 'vue';
 import Card from './Card.vue';
 import type { CardSize } from '../engine/geometry';
 import type { CardDef, DeckDef, Location, SpreadDef, TableState } from '../engine/types';
@@ -17,6 +16,10 @@ const props = defineProps<{
   deck: DeckDef;
   transform: string;
   imageFor: (key: string) => string | null;
+  /** Back image for a card id (Minor Arcana may have their own back). */
+  backFor: (id: string) => string | null;
+  /** Relative size of a card id (Minor Arcana are a bit smaller). */
+  scaleFor: (id: string) => number;
   /** Card currently being dragged (hidden at its source). */
   dragging: Location | null;
   /** Colour of the remote player holding a card, by `kind:index`. */
@@ -30,8 +33,6 @@ const emit = defineEmits<{
 }>();
 
 const { t, l } = useI18n();
-
-const backSrc = computed(() => props.imageFor('back'));
 
 const isDragging = (loc: Location) =>
   props.dragging?.kind === loc.kind && props.dragging.index === loc.index;
@@ -94,7 +95,8 @@ const onKey = (ev: KeyboardEvent, loc: Location) => {
             :face="state.slots[index]!.face"
             :reversed="state.slots[index]!.reversed"
             :front-src="imageFor(state.slots[index]!.id)"
-            :back-src="backSrc"
+            :back-src="backFor(state.slots[index]!.id)"
+            :scale="scaleFor(state.slots[index]!.id)"
             :fit="deck.fit"
             :alt="cardName(state.slots[index]!.id)"
           />
@@ -130,7 +132,8 @@ const onKey = (ev: KeyboardEvent, loc: Location) => {
         :face="card.face"
         :reversed="card.reversed"
         :front-src="imageFor(card.id)"
-        :back-src="backSrc"
+        :back-src="backFor(card.id)"
+        :scale="scaleFor(card.id)"
         :fit="deck.fit"
         :alt="cardName(card.id)"
       />

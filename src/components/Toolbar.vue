@@ -18,6 +18,9 @@ defineProps<{
   canUndo: boolean;
   canRedo: boolean;
   allowReversed: boolean;
+  minorArcana: boolean;
+  /** Guests follow the host's deck; only the host decides on the Minor Arcana. */
+  minorArcanaLocked: boolean;
   haptics: boolean;
   locale: Locale;
   deckIsCustom: boolean;
@@ -37,6 +40,7 @@ const emit = defineEmits<{
   (e: 'fit'): void;
   (e: 'new-reading'): void;
   (e: 'toggle-reversed'): void;
+  (e: 'toggle-minor'): void;
   (e: 'toggle-haptics'): void;
   (e: 'set-locale', locale: Locale): void;
   (e: 'import-zip', file: File): void;
@@ -138,6 +142,9 @@ onBeforeUnmount(() => {
         <hr />
         <button class="item" role="menuitemcheckbox" :aria-checked="allowReversed" @click="emit('toggle-reversed')">
           <span class="check" aria-hidden="true">{{ allowReversed ? '☑' : '☐' }}</span> {{ t('toolbar.reversed') }}
+        </button>
+        <button class="item" role="menuitemcheckbox" :aria-checked="minorArcana" :disabled="minorArcanaLocked" data-testid="menu-minor" @click="run(() => emit('toggle-minor'))">
+          <span class="check" aria-hidden="true">{{ minorArcana ? '☑' : '☐' }}</span> {{ t('toolbar.minorArcana') }}
         </button>
         <button class="item" role="menuitemcheckbox" :aria-checked="haptics" @click="emit('toggle-haptics')">
           <span class="check" aria-hidden="true">{{ haptics ? '☑' : '☐' }}</span> {{ t('toolbar.haptics') }}

@@ -7,6 +7,8 @@ export interface Settings {
   version: 1;
   locale: Locale;
   allowReversed: boolean;
+  /** Whether new tables include the 56 Minor Arcana (plans/minor-arcana.md). */
+  minorArcana: boolean;
   haptics: boolean;
   fanned: boolean;
   deckId: string | null;
@@ -26,6 +28,7 @@ function defaults(): Settings {
     version: 1,
     locale: detectLocale(),
     allowReversed: true,
+    minorArcana: true,
     haptics: true,
     fanned: false,
     deckId: null,

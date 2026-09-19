@@ -23,14 +23,15 @@ export function loadSavedTable(): TableState | null {
   }
 }
 
-/** True when a saved state is consistent with the given game and spread. */
+/**
+ * True when a saved state is consistent with the given game and spread: its
+ * cards must be one of the game's card sets (with or without the Minor Arcana).
+ */
 export function isCompatible(state: TableState, game: GameDef, spread: SpreadDef): boolean {
   if (state.gameId !== game.id || state.spreadId !== spread.id) return false;
   if (state.slots.length !== spread.slots.length) return false;
-  const ids = new Set(game.cards.map((c) => c.id));
-  const all = [...state.deck, ...state.loose, ...state.slots.filter((c) => c !== null)];
-  if (all.length !== ids.size) return false;
-  return all.every((c) => c && ids.has(c.id));
+  const all = table.allCards(state);
+  return all.every((c) => c && typeof c.id === 'string') && table.isCardSet(all.map((c) => c.id), game);
 }
 
 export function useTable(initial: TableState) {

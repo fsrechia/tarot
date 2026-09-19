@@ -8,7 +8,7 @@ async function open(page: Page) {
     sessionStorage.setItem('e2e-initialised', '1');
     localStorage.setItem(
       'tarot.settings.v1',
-      JSON.stringify({ version: 1, locale: 'en', allowReversed: false, haptics: false, fanned: false, deckId: 'standard', spreadId: 'three', seenHelp: true }),
+      JSON.stringify({ version: 1, locale: 'en', allowReversed: false, minorArcana: false, haptics: false, fanned: false, deckId: 'standard', spreadId: 'three', seenHelp: true }),
     );
     localStorage.removeItem('tarot.table.v1');
   });
@@ -106,4 +106,30 @@ test('the table survives a reload', async ({ page }) => {
   await page.reload();
   await expect(page.getByRole('button', { name: /Deck, 21 cards left/ })).toBeVisible();
   await expect(page.locator('[data-slot-index="0"] [data-card]')).toBeVisible();
+});
+
+test('the Minor Arcana toggle starts a 78-card table that survives a reload; minors are drawn smaller', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'More' }).click();
+  await page.getByTestId('menu-minor').click();
+  await expect(page.getByRole('button', { name: /Deck, 78 cards left/ })).toBeVisible();
+  await expect(page.locator('[data-slot-index]')).toHaveCount(3);
+
+  // Every minor card is somewhere in the saved deck, drawn at a reduced scale.
+  // Autosave is debounced, so wait for the 78-card table to reach storage.
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('tarot.table.v1') ?? 'null')?.deck?.length ?? 0)).toBe(78);
+  const scales = await page.evaluate(() => {
+    const deck = JSON.parse(localStorage.getItem('tarot.table.v1')!).deck as { id: string }[];
+    const cards = Array.from(document.querySelectorAll('[data-drop="deck"] .deck-card .card')) as HTMLElement[];
+    return deck.map((c, i) => ({ minor: c.id.includes('-'), scale: cards[i]!.style.getPropertyValue('--card-scale') }));
+  });
+  expect(scales.filter((s) => s.minor)).toHaveLength(56);
+  for (const s of scales) expect(Number(s.scale) < 1).toBe(s.minor);
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: /Deck, 78 cards left/ })).toBeVisible();
+  await page.getByRole('button', { name: 'More' }).click();
+  await expect(page.getByTestId('menu-minor')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('menu-minor').click();
+  await expect(page.getByRole('button', { name: /Deck, 22 cards left/ })).toBeVisible();
 });

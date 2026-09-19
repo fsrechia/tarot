@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
  * Visual card: back / front, flip and reversed animation.
- * Size comes from the `--card-w` / `--card-h` CSS variables of an ancestor.
+ * Size comes from the `--card-w` / `--card-h` CSS variables of an ancestor;
+ * `scale` shrinks the face around its centre (Minor Arcana are a bit smaller)
+ * without changing the box the parent lays out.
  * The front image is only requested once the card is shown face up (or the
  * parent asks for it), so a full deck does not download 22 images at start.
  */
@@ -19,8 +21,10 @@ const props = withDefaults(
     /** Force the front image to load even while face down (e.g. for prefetch). */
     preloadFront?: boolean;
     animated?: boolean;
+    /** Relative size of the face (1 = the full card box). */
+    scale?: number;
   }>(),
-  { reversed: false, frontSrc: null, backSrc: null, fit: 'cover', alt: '', preloadFront: false, animated: true },
+  { reversed: false, frontSrc: null, backSrc: null, fit: 'cover', alt: '', preloadFront: false, animated: true, scale: 1 },
 );
 
 const frontWanted = ref(props.face === 'up' || props.preloadFront);
@@ -44,7 +48,7 @@ const showFrontImage = computed(() => Boolean(props.frontSrc) && frontWanted.val
   <div
     class="card"
     :class="{ 'is-up': face === 'up', 'is-reversed': reversed, 'no-anim': !animated }"
-    :style="{ '--fit': fit }"
+    :style="{ '--fit': fit, '--card-scale': scale }"
   >
     <div class="card-inner">
       <div class="face back" aria-hidden="true">
@@ -90,12 +94,12 @@ const showFrontImage = computed(() => Boolean(props.frontSrc) && frontWanted.val
   position: relative;
   transform-style: preserve-3d;
   transition: transform 0.55s cubic-bezier(0.25, 0.8, 0.25, 1);
-  transform: rotateY(0deg) rotateZ(0deg);
+  transform: scale(var(--card-scale, 1)) rotateY(0deg) rotateZ(0deg);
   will-change: transform;
 }
 .no-anim .card-inner { transition: none; }
-.card.is-up .card-inner { transform: rotateY(180deg) rotateZ(0deg); }
-.card.is-up.is-reversed .card-inner { transform: rotateY(180deg) rotateZ(180deg); }
+.card.is-up .card-inner { transform: scale(var(--card-scale, 1)) rotateY(180deg) rotateZ(0deg); }
+.card.is-up.is-reversed .card-inner { transform: scale(var(--card-scale, 1)) rotateY(180deg) rotateZ(180deg); }
 
 .face {
   position: absolute;

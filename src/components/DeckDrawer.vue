@@ -20,7 +20,10 @@ const props = defineProps<{
   cards: TableCard[];
   fanned: boolean;
   cardSize: CardSize;
-  backSrc: string | null;
+  /** Back image per card id: Minor Arcana may have their own back. */
+  backFor: (id: string) => string | null;
+  /** Relative size per card id (Minor Arcana are a bit smaller). */
+  scaleFor: (id: string) => number;
   availableWidth: number;
   shuffling: boolean;
   scatter: Record<string, Scatter>;
@@ -103,7 +106,7 @@ const onKey = (ev: KeyboardEvent) => {
         data-card
         @pointerdown="onDown($event, index)"
       >
-        <Card face="down" :back-src="backSrc" :animated="false" />
+        <Card face="down" :back-src="backFor(card.id)" :scale="scaleFor(card.id)" :animated="false" />
       </div>
       <div v-if="count === 0" class="empty"></div>
     </div>

@@ -29,17 +29,17 @@ Dependencies only point downward.
 
 ## Core types (`src/engine/types.ts`)
 
-- `CardDef` — a card of a *family* (e.g. `tarot-major`): id, localized name, keywords, meanings.
-- `DeckDef` — artwork for a family: which card ids it has, back image, aspect ratio, `fit`, fallback deck, and a `source` (`static` path or `blob` URLs for imported decks).
+- `CardDef` — a card of a *family* (e.g. `tarot-major`): id, localized name, keywords, meanings. Optional `arcana` (`major` | `minor`), `suit`/`rank` for the Minor Arcana, and `scale` (relative size on the table; minors are 0.88).
+- `DeckDef` — artwork for a family: which card ids it has, back image (`hasBack`, plus `hasMinorBack` for a separate `back-minor` image), aspect ratio, `fit`, fallback deck, and a `source` (`static` path or `blob` URLs for imported decks).
 - `SpreadDef` / `SlotDef` — positions as card centres in **card units** (x in card widths, y in card heights), optional `rotation` and `labelPlacement`.
-- `GameDef` — family, cards, spreads, `rules` (`allowReversed`, `reversedChance`, `drawFaceDown`), defaults.
+- `GameDef` — family, cards, spreads, `rules` (`allowReversed`, `reversedChance`, `drawFaceDown`, `minorArcana`), defaults. The tarot game carries all 78 cards; `rules.minorArcana` (a setting) decides whether a new table deals 22 or 78 (`activeCards`). A table's cards must always be one of the game's *card sets* (`cardSets`: all cards, or all but the minors), which is what autosave restore and multiplayer snapshot validation check (`isCardSet`).
 - `TableCard` — `id`, `face`, `reversed`, and an optional `turned` flag set when the player toggled a face-up card's orientation by hand (absent = false; cleared when the card goes face down).
 - `TableState` — `deck` (last = top), `slots` (one per spread slot), `loose` (free cards with `x`, `y`, `z`), `nextZ`, plus `gameId/deckId/spreadId`. `version: 1`.
 - `Location` (`deck|slot|loose` + index) and `DropTarget` (`deck` | `slot` | `loose {x,y}`).
 
 ## Engine (`src/engine/table.ts`)
 
-Pure functions `TableState → TableState`: `createTable`, `shuffleTable`, `moveCard`, `flipCard`, `setCard`, `raiseLoose`, `draw`, `placeCards`, `dealSpread`, `revealAll`, `gatherAll`, `changeSpread`. Rules:
+Pure functions `TableState → TableState`: `createTable`, `shuffleTable`, `moveCard`, `flipCard`, `setCard`, `raiseLoose`, `draw`, `placeCards`, `dealSpread`, `revealAll`, `gatherAll`, `changeSpread`; plus the card-set helpers `activeCards`, `cardSets`, `isCardSet`, `allCards`, `usesMinorArcana`. Rules:
 
 - Dropping on the deck returns a card face down to the top.
 - Dropping on an occupied slot swaps (slot↔slot), displaces to the loose card's old spot (loose→slot) or returns the occupant to the deck (deck→slot).
@@ -75,7 +75,7 @@ Drop resolution (orchestrator `handleDrop`): element under the pointer inside `[
 
 ## State, undo, persistence (`composables/useTable.ts`)
 
-`state` is a `ref<TableState>`; `commit(next)` records history (60 steps), `amend(next)` replaces the current state without a new entry (the shuffle animation's second half), and `replace(next)` resets history. Autosave (150ms debounce) writes `tarot.table.v1` to localStorage; on load the saved table's spread is used (settings' remembered spread is only a fallback) and `isCompatible` checks game, spread and card set before restoring. Settings live in `tarot.settings.v1` (`useSettings`, shared reactive singleton; unknown locales fall back to detection). Imported decks live in IndexedDB store `tarot/decks` (`idb-keyval`).
+`state` is a `ref<TableState>`; `commit(next)` records history (60 steps), `amend(next)` replaces the current state without a new entry (the shuffle animation's second half), and `replace(next)` resets history. Autosave (150ms debounce) writes `tarot.table.v1` to localStorage; on load the saved table's spread is used (settings' remembered spread is only a fallback) and `isCompatible` checks game, spread and card set (22 or 78 cards) before restoring; the *Minor Arcana* setting is then synced from the restored table, so it only ever applies to the next new table. Settings live in `tarot.settings.v1` (`useSettings`, shared reactive singleton; unknown locales fall back to detection). Imported decks live in IndexedDB store `tarot/decks` (`idb-keyval`).
 
 Because every mutation is a pure function of the previous state, the same operations can later be sent over the wire for multiplayer (`plans/multiplayer-table.md`) or replayed for a reading journal.
 
@@ -87,7 +87,7 @@ Every action is an `Op` (`protocol.ts`): `move`, `flip`, `draw`, `gather`, `shuf
 - host → apply, broadcast `{t:'snapshot', state}` to every guest (plus `{t:'effect'}` for the shuffle animation);
 - guest → send `{t:'op'}` to the host and wait for the snapshot.
 
-`room.ts` builds a star of WebRTC DataChannels around the host; `signaling.ts` talks to the helper in `server/signaling/` which maps a 6-character token to a room and relays SDP/ICE only. Once a guest's channel is open the helper is out of the loop for that guest; a `disconnected` connection gets an 8-second grace before it counts as lost. Guests validate every snapshot (`isValidState`: every card once, a known spread with matching slot count, finite loose positions). Presence ("who is holding which card") is a `holding`/`held` message rendered as a coloured outline. Ops at a shared table bypass the undo history (which is cleared when hosting starts); guests pause autosave and get their own table back on leaving. Rooms with no guests expire 10 minutes after the last join/leave and the host is told. Details and decisions: `plans/multiplayer-table.md`.
+`room.ts` builds a star of WebRTC DataChannels around the host; `signaling.ts` talks to the helper in `server/signaling/` which maps a 6-character token to a room and relays SDP/ICE only. Once a guest's channel is open the helper is out of the loop for that guest; a `disconnected` connection gets an 8-second grace before it counts as lost. If the helper goes away the host retries it and takes a fresh code (`Room.renewToken`, surfaced through `onToken`); the game continues on the channels meanwhile. Guests validate every snapshot (`isValidState`: every card once, a known spread with matching slot count, finite loose positions). Presence ("who is holding which card") is a `holding`/`held` message rendered as a coloured outline. Ops at a shared table bypass the undo history (which is cleared when hosting starts); guests pause autosave and get their own table back on leaving. Rooms with no guests expire 10 minutes after the last join/leave; the host then simply fetches a new code. `useRoom` tags every host/join attempt with an id so *Cancel* while connecting wins over a late completion. Details and decisions: `plans/multiplayer-table.md`.
 
 ## AI reader (`src/ai/`)
 
@@ -96,7 +96,7 @@ Every action is an `Op` (`protocol.ts`): `move`, `flip`, `draw`, `gather`, `shuf
 ## Rendering
 
 - `TableCanvas.vue`: one absolutely positioned `.canvas` with the camera transform; slots at `(x*cw - cw/2, y*ch - ch/2)`, a rotated `.slot-box` for sideways positions, labels outside the rotation; loose cards ordered by `z`.
-- `Card.vue`: back/front faces with a 3D flip; reversed = `rotateZ(180deg)`; the front `<img>` only gets a `src` once shown face up.
+- `Card.vue`: back/front faces with a 3D flip; reversed = `rotateZ(180deg)`; the front `<img>` only gets a `src` once shown face up. `scale` shrinks the face around its centre (Minor Arcana) while the holder keeps the full card box, so positions, hit-tests and card units stay in Major-card size. Backs are resolved per card (`resolveBack`): minors get `back-minor` when the deck or its fallback chain has one, else the regular back.
 - `DeckDrawer.vue`: the same deck rendered as a stack (top card grabbable) or a fan whose spacing adapts to the available width; the shuffle scatter animation is driven by a transient `scatter` map.
 - The whole component is `client:only="vue"` (it reads storage during setup).
 
@@ -106,7 +106,7 @@ Every action is an `Op` (`protocol.ts`): `move`, `flip`, `draw`, `gather`, `shuf
 
 ## Adding things
 
-- **Deck**: images in `public/decks/<id>/` + manifest in `src/decks/manifests/` (auto-registered via `import.meta.glob`).
+- **Deck**: images in `public/decks/<id>/` + manifest in `src/decks/manifests/` (auto-registered via `import.meta.glob`). Minor Arcana images are `<suit>-<rank>.<ext>` (`wands-01` … `pentacles-king`) and `back-minor.<ext>`; a deck may carry any subset and the rest falls back (the generic set lives in `standard`, generated by `scripts/gen-minor-cards.mjs`).
 - **Spread**: a `SpreadDef` in `src/spreads/`.
 - **Game**: a `GameDef` in `src/games/` (+ card data) registered in `src/games/index.ts`. The orchestrator currently imports `tarotGame`; making the game selectable is a small change (`plans/new-game-template.md`).
 

@@ -21,12 +21,11 @@ export const lenormandGame: GameDef = {
 Plus a deck manifest + images under `public/decks/lenormand-classic/`.
 
 ## Minor Arcana (78-card tarot)
-- Add 56 `CardDef`s (`wands-01` … `pentacles-king`) with names/meanings (en, pt-BR) in `src/decks/tarot-minor.ts`; family `tarot-78`; game `tarot78` (or a `rules.majorOnly` toggle on the tarot game with the deck manifest declaring which cards it has — better, because the Vitoriushka deck is Major-only and would fall back).
-- Deck fan spacing already adapts; the stack shows "78 left".
+Shipped: see [minor-arcana.md](minor-arcana.md). The tarot game carries 78 `CardDef`s and `rules.minorArcana` (a setting) leaves the 56 minors out; deck manifests declare which minor ids they have and the rest falls back to the generic set.
 
 ## Card *games* (solitaire, etc.)
 Need engine additions that tarot does not: per-player hands (`owner`, `visibility`), rule validation hooks (`canMove(state, from, to)`), scoring, turn order. Plan them as an `engine/rules.ts` layer that wraps the pure ops without changing the tarot path. Multiplayer (`multiplayer-table.md`) already assumes host authority, which is what rule validation needs.
 
 ## Open questions
 - First non-tarot game to build: Lenormand (reading-oriented, same UX) or a playing-card game (exercises rules/hands)?
-- Are 78-card images planned for the personal deck?
+- Are 78-card images planned for the personal deck? (The generic fronts stand in until then; `back-minor.webp` for Vitoriushka is a tinted copy of the painted back.)

@@ -17,6 +17,7 @@ const props = defineProps<{
   backSrc: string | null;
   fit: 'cover' | 'contain';
   alt: string;
+  scale: number;
 }>();
 
 const style = computed(() => {
@@ -32,7 +33,7 @@ const style = computed(() => {
 
 <template>
   <div class="ghost" :style="style" aria-hidden="true">
-    <Card :face="card.face" :reversed="card.reversed" :front-src="frontSrc" :back-src="backSrc" :fit="fit" :alt="alt" :animated="false" />
+    <Card :face="card.face" :reversed="card.reversed" :front-src="frontSrc" :back-src="backSrc" :fit="fit" :alt="alt" :scale="scale" :animated="false" />
   </div>
 </template>
 

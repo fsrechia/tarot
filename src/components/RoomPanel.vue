@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from '../composables/useI18n';
 import { useRoom } from '../composables/useRoom';
 import { useSettings } from '../composables/useSettings';
+import { copyText } from '../composables/useClipboard';
 
 const props = defineProps<{ initialToken?: string }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
@@ -14,8 +15,10 @@ const roomApi = useRoom();
 const rs = roomApi.state;
 
 const name = ref(settings.nickname || '');
-const token = ref((props.initialToken || '').toUpperCase());
-const copied = ref(false);
+// After a dropped connection the last code is pre-filled so rejoining is one tap.
+const token = ref((props.initialToken || (rs.status === 'error' ? rs.lastToken : '') || '').toUpperCase());
+const copied = ref<'link' | 'code' | 'failed' | null>(null);
+const renewing = ref(false);
 
 const link = computed(() => (rs.token ? `${location.origin}${location.pathname}#join=${rs.token}` : ''));
 const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
@@ -36,14 +39,22 @@ const join = async () => {
   await roomApi.join(tk, displayName());
   if (rs.status === 'joined') emit('close');
 };
-const copy = async () => {
+const copy = async (what: 'link' | 'code') => {
+  const ok = await copyText(what === 'link' ? link.value : rs.token ?? '');
+  copied.value = ok ? what : 'failed';
+  setTimeout(() => (copied.value = null), 1800);
+};
+const renew = async () => {
+  renewing.value = true;
   try {
-    await navigator.clipboard.writeText(link.value);
-    copied.value = true;
-    setTimeout(() => (copied.value = false), 1500);
-  } catch {
-    /* clipboard unavailable */
+    await roomApi.renewToken();
+  } finally {
+    renewing.value = false;
   }
+};
+const close = () => {
+  roomApi.dismissError(); // a stale error must not greet the next opening
+  emit('close');
 };
 const share = async () => {
   try {
@@ -74,18 +85,18 @@ const errorText = computed(() => {
 });
 
 const onKey = (ev: KeyboardEvent) => {
-  if (ev.key === 'Escape') emit('close');
+  if (ev.key === 'Escape') close();
 };
 onMounted(() => document.addEventListener('keydown', onKey));
 onBeforeUnmount(() => document.removeEventListener('keydown', onKey));
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" @click.self="close">
     <div class="modal panel" role="dialog" aria-modal="true" :aria-label="t('room.title')">
       <div class="modal-title-row">
         <h2>{{ t('room.title') }}</h2>
-        <button class="btn btn-icon" type="button" :aria-label="t('card.close')" @click="emit('close')">✕</button>
+        <button class="btn btn-icon" type="button" :aria-label="t('card.close')" @click="close">✕</button>
       </div>
 
       <!-- Active room -->
@@ -93,12 +104,24 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey));
         <p class="hint">{{ rs.status === 'hosting' ? t('room.hostingHint') : t('room.joinedHint') }}</p>
         <div class="token" aria-live="polite">
           <span class="token-label">{{ t('room.token') }}</span>
-          <strong class="token-value" data-testid="room-token">{{ rs.token }}</strong>
+          <strong v-if="rs.token" class="token-value" data-testid="room-token">{{ rs.token }}</strong>
+          <template v-else>
+            <span class="hint small" data-testid="room-token-unavailable">{{ t('room.tokenUnavailable') }}</span>
+            <button class="btn" type="button" :disabled="renewing" @click="renew">{{ t('room.newCode') }}</button>
+          </template>
         </div>
-        <div class="row">
-          <button class="btn" type="button" @click="copy">{{ copied ? t('room.copied') : t('room.copyLink') }}</button>
-          <button v-if="canShare" class="btn" type="button" @click="share">{{ t('room.share') }}</button>
-        </div>
+        <template v-if="rs.token">
+          <label class="field">
+            <span>{{ t('room.link') }}</span>
+            <input class="input link" type="text" readonly :value="link" @focus="($event.target as HTMLInputElement).select()" />
+          </label>
+          <div class="row">
+            <button class="btn" type="button" @click="copy('link')">{{ copied === 'link' ? t('room.copied') : t('room.copyLink') }}</button>
+            <button class="btn" type="button" @click="copy('code')">{{ copied === 'code' ? t('room.copied') : t('room.copyCode') }}</button>
+            <button v-if="canShare" class="btn" type="button" @click="share">{{ t('room.share') }}</button>
+          </div>
+          <p v-if="copied === 'failed'" class="hint small" role="status">{{ t('room.copyFailed') }}</p>
+        </template>
         <h3>{{ t('room.players', { n: rs.peers.length }) }}</h3>
         <ul class="peers">
           <li v-for="p in rs.peers" :key="p.id"><span class="dot" :style="{ background: p.color }"></span>{{ p.name }}<span v-if="p.id === 'host'" class="tag">{{ t('room.hostTag') }}</span></li>
@@ -157,6 +180,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey));
 
 <style scoped>
 .hint { margin: 0 0 0.75rem; color: var(--color-text-muted); line-height: 1.5; }
+.input.link { font-size: 0.85rem; font-family: ui-monospace, monospace; }
 .hint.small { font-size: 0.8rem; }
 .error { margin: 0 0 0.75rem; padding: 0.6rem 0.8rem; border-radius: 10px; background: #3a2626; color: #f0b7b7; }
 .block { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--color-panel-border); }

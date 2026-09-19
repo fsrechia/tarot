@@ -15,6 +15,16 @@ export interface CardDef {
   id: string;
   /** Ordinal within its family (0 for The Fool, 1 for The Magician...). */
   number?: number;
+  /**
+   * Which part of the deck the card belongs to. `GameRules.minorArcana`
+   * leaves `minor` cards out of the deck; absent = always in play.
+   */
+  arcana?: 'major' | 'minor';
+  /** Minor Arcana only: suit and rank (`01`…`10`, `page`, `knight`, `queen`, `king`). */
+  suit?: string;
+  rank?: string;
+  /** Size relative to the deck's card size (1 = full size). Minor cards are drawn a bit smaller. */
+  scale?: number;
   name: Localized;
   keywords?: { en: string[] } & Partial<Record<Locale, string[]>>;
   meaning?: {
@@ -38,6 +48,8 @@ export interface DeckDef {
   cards: string[];
   /** Whether a back image exists (`back.<ext>` for static decks). */
   hasBack: boolean;
+  /** Whether a separate back for Minor Arcana cards exists (`back-minor.<ext>`). Absent = no. */
+  hasMinorBack?: boolean;
   fallbackDeckId?: string;
   /** width / height of the artwork. */
   aspectRatio: number;
@@ -84,6 +96,8 @@ export interface GameRules {
   reversedChance: number;
   /** Whether cards come out of the deck face down. */
   drawFaceDown: boolean;
+  /** Whether cards tagged `arcana: 'minor'` are in the deck. Absent = yes. */
+  minorArcana?: boolean;
 }
 
 export interface GameDef {
