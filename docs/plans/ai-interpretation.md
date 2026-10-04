@@ -9,7 +9,7 @@
 - `src/ai/markdown.ts` — tiny escaping Markdown renderer (no dependency, no raw HTML).
 - `src/ai/store.ts` — `Interpretation` records in IndexedDB `tarot-ai/interpretations` (a separate database: idb-keyval cannot add a store to the existing `tarot` database). This is the first slice of the journal.
 - `src/ai/models.ts` — preset slugs; the default is `anthropic/claude-opus-5`, `anthropic/claude-haiku-4.5` picks cards for dreams.
-- `AskPanel.vue` — consent → key → question/dream, mode toggle, table summary, card chips (tap → card detail), streamed answer with stop, follow-ups, copy/share, recent threads, settings (model preset or custom slug, "send deck notes", remove key). Toolbar ✦ button, menu item, keyboard `A`.
+- `AskPanel.vue` — consent → key → question/dream, mode toggle, table summary, card chips (tap → card detail), streamed answer with stop, follow-ups, copy/share, recent threads, settings (model preset or custom slug, "send deck notes", remove key). Toolbar ✦ button, menu item, keyboard `A`. The key step is skippable: "Use another chat" reveals a **Copy the prompt** button (`promptToClipboard`, `src/ai/prompts.ts`) so the full system + reading prompt can be pasted into any chat app without an OpenRouter key.
 - `DeckDef.notes` (localized) + `notes` in the Vitoriushka manifest.
 - Engine op `placeCards` + protocol op `place` so model-suggested cards go through `dispatch` like every other action (works at a shared table too).
 - Tests: `tests/unit/ai.test.ts` (SSE, client, markdown, prompts), engine/protocol tests, `tests/e2e/ask.spec.ts` against a mocked endpoint.

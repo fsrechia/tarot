@@ -103,6 +103,32 @@ test('the Interpret button stays disabled until a card is face up, and shows the
   await expect(page.getByTestId('ask-error')).toContainText('rejected the key');
 });
 
+test('copy the prompt without a key, to paste into any chat app', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await open(page);
+
+  // Draw one card and flip it face up, as in the OpenRouter flow.
+  await page.locator('[data-drop="deck"] .deck-card').last().click();
+  const placed = page.locator('[data-slot-index="0"] [data-card]');
+  await placed.click();
+  await expect(placed).toHaveAttribute('aria-label', /upright/);
+
+  await page.getByTestId('toolbar-ask').click();
+  await page.getByTestId('ask-consent').click();
+  await page.getByTestId('ask-use-own-chat').click();
+
+  // No key: only the copy path is offered.
+  await expect(page.getByTestId('ask-interpret')).toHaveCount(0);
+  await page.getByTestId('ask-question').fill('Should I change jobs?');
+  await page.getByTestId('ask-copy-prompt').click();
+
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text).toContain('You are an experienced tarot reader');
+  expect(text).toContain('Interpret this spread in relation to the question');
+  expect(text).toContain('Should I change jobs?');
+  expect(text).toContain('"position": "Past"');
+});
+
 test('dream mode: the model suggests cards and they land face up in the empty slots', async ({ page }) => {
   await open(page, { aiConsent: true });
   await page.addInitScript(() => localStorage.setItem('tarot.ai.key', 'sk-or-v1-test-key-1234'));

@@ -92,7 +92,13 @@ test('the Celtic Cross crossing slot accepts a drop and the whole spread fits on
   const heart = (await page.locator('[data-slot-index="0"]').boundingBox())!;
   let a = (await deckCard().boundingBox())!;
   await drag(page, { x: a.x + a.width / 2, y: a.y + 10 }, { x: heart.x + heart.width / 2, y: heart.y + heart.height / 2 });
-  await expect(page.locator('[data-slot-index="0"] [data-card]')).toBeVisible();
+  const heartCard = page.locator('[data-slot-index="0"] [data-card]');
+  await expect(heartCard).toBeVisible();
+  // The crossing slot is still an empty placeholder stacked on top of the heart
+  // card at this point; it must not swallow taps meant for the card beneath.
+  await expect(heartCard).toHaveAttribute('aria-label', /face down/);
+  await heartCard.click();
+  await expect(heartCard).toHaveAttribute('aria-label', /upright/);
   a = (await deckCard().boundingBox())!;
   await drag(page, { x: a.x + a.width / 2, y: a.y + 10 }, { x: heart.x + heart.width / 2, y: heart.y + heart.height / 2 });
   await expect(page.locator('[data-slot-index="1"] [data-card]')).toBeVisible();

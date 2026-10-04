@@ -163,6 +163,11 @@ const onKey = (ev: KeyboardEvent, loc: Location) => {
   position: absolute;
   width: var(--card-w);
   height: var(--card-h);
+  /* Slots overlap (Celtic Cross: the crossing card shares the heart's centre).
+     Only the card itself may catch the pointer, so an empty slot on top does
+     not swallow taps meant for the card underneath. Drops are resolved by
+     geometry in TarotTable (`findSlotAt`), not by hit-testing these boxes. */
+  pointer-events: none;
 }
 .slot-box {
   position: absolute;
@@ -195,6 +200,7 @@ const onKey = (ev: KeyboardEvent, loc: Location) => {
 .holder {
   position: absolute;
   inset: 0;
+  pointer-events: auto;
   cursor: grab;
   touch-action: none;
   border-radius: calc(var(--card-w) * 0.07);

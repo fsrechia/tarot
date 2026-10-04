@@ -157,6 +157,15 @@ export function buildThread(input: ReadingInput): ChatMessage[] {
   return [{ role: 'system', content: systemPrompt(input.locale, input.mode, input.cards.length) }, { role: 'user', content: initialUserMessage(input) }];
 }
 
+/**
+ * The whole prompt as one text block, for pasting into any chat app instead of
+ * calling OpenRouter. The system instructions come first, then the reading.
+ */
+export function promptToClipboard(input: ReadingInput): string {
+  const [system, user] = buildThread(input);
+  return `${system.content}\n\n---\n\n${user.content}`;
+}
+
 // ---------------------------------------------------------------------------
 // Dream → suggested cards (step 1 of the dream pipeline)
 // ---------------------------------------------------------------------------

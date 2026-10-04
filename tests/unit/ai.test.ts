@@ -8,6 +8,7 @@ import {
   hiddenCount,
   lengthBudget,
   parseSuggestedCards,
+  promptToClipboard,
   suggestCardsMessages,
   visibleCards,
 } from '../../src/ai/prompts';
@@ -131,6 +132,14 @@ describe('prompts', () => {
     const input = buildReadingInput({ state, spread: free, cardsById, deck, question: '', mode: 'reading', locale: 'en', includeDeckNotes: false });
     expect(input.spread).toBeNull();
     expect(input.cards[0]!.position).toBeNull();
+  });
+  it('builds one copyable prompt from the system and user turns', () => {
+    const input = buildReadingInput({ state: sampleTable(), spread, cardsById, deck, question: 'New job?', mode: 'reading', locale: 'en', includeDeckNotes: false });
+    const text = promptToClipboard(input);
+    expect(text).toContain('You are an experienced tarot reader');
+    expect(text).toContain('Interpret this spread in relation to the question');
+    expect(text).toContain('"card": "The Star"');
+    expect(text.indexOf('You are an experienced tarot reader')).toBeLessThan(text.indexOf('Interpret this spread'));
   });
   it('attaches the table to a follow-up only when it changed', () => {
     const input = buildReadingInput({ state: sampleTable(), spread, cardsById, deck, question: 'q', mode: 'reading', locale: 'en', includeDeckNotes: false });

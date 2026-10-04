@@ -16,6 +16,7 @@ import {
   buildThread,
   followUpMessage,
   parseSuggestedCards,
+  promptToClipboard,
   suggestCardsMessages,
   systemPrompt,
   visibleCards,
@@ -67,6 +68,9 @@ const removeKey = () => {
   apiKey.value = '';
 };
 
+/** True when the user skipped the OpenRouter key to copy the prompt into another chat. */
+const manual = ref(false);
+
 // ---------------------------------------------------------------------------
 // Question + table
 // ---------------------------------------------------------------------------
@@ -109,6 +113,7 @@ const partial = ref('');
 const error = ref<string | null>(null);
 const followUp = ref('');
 const copied = ref<'yes' | 'failed' | null>(null);
+const promptCopied = ref<'yes' | 'failed' | null>(null);
 const suggesting = ref(false);
 let controller: AbortController | null = null;
 let suggestController: AbortController | null = null;
@@ -299,6 +304,12 @@ const copy = async () => {
   copied.value = (await copyText(transcript())) ? 'yes' : 'failed';
   setTimeout(() => (copied.value = null), 1800);
 };
+/** Copies the full prompt so it can be pasted into any chat app, key or not. */
+const copyPrompt = async () => {
+  if (!input.value.cards.length) return;
+  promptCopied.value = (await copyText(promptToClipboard(input.value))) ? 'yes' : 'failed';
+  setTimeout(() => (promptCopied.value = null), 1800);
+};
 const share = async () => {
   try {
     await navigator.share({ title: t('app.title'), text: transcript() });
@@ -370,7 +381,7 @@ watch(mode, () => {
       </template>
 
       <!-- Step 2: key -->
-      <template v-else-if="!apiKey">
+      <template v-else-if="!apiKey && !manual">
         <h3>{{ t('ask.keyTitle') }}</h3>
         <p class="hint">{{ t('ask.keyBody') }}</p>
         <div class="row">
@@ -386,6 +397,10 @@ watch(mode, () => {
           />
           <button class="btn btn-primary" type="button" :disabled="keyInput.trim().length < 8" data-testid="ask-key-save" @click="saveKey">{{ t('ask.keySave') }}</button>
         </div>
+        <div class="row end">
+          <button class="btn" type="button" data-testid="ask-use-own-chat" @click="manual = true">{{ t('ask.useOwnChat') }}</button>
+        </div>
+        <p class="hint small">{{ t('ask.useOwnChatHint') }}</p>
       </template>
 
       <!-- Main -->
@@ -443,9 +458,16 @@ watch(mode, () => {
         </div>
 
         <!-- Actions -->
-        <div v-if="!thread" class="row end">
-          <button class="btn btn-primary" type="button" :disabled="!canInterpret" data-testid="ask-interpret" @click="interpret">{{ t('ask.interpret') }}</button>
-        </div>
+        <template v-if="!thread">
+          <p v-if="!apiKey" class="hint small">{{ t('ask.useOwnChatHint') }}</p>
+          <div class="row end">
+            <button class="btn" type="button" :disabled="input.cards.length === 0" data-testid="ask-copy-prompt" @click="copyPrompt">
+              {{ promptCopied === 'yes' ? t('ask.promptCopied') : promptCopied === 'failed' ? t('ask.copyFailed') : t('ask.copyPrompt') }}
+            </button>
+            <button v-if="apiKey" class="btn btn-primary" type="button" :disabled="!canInterpret" data-testid="ask-interpret" @click="interpret">{{ t('ask.interpret') }}</button>
+            <button v-else class="btn btn-primary" type="button" data-testid="ask-connect" @click="manual = false">{{ t('ask.connectOpenRouter') }}</button>
+          </div>
+        </template>
         <template v-else>
           <div v-if="streaming" class="row end">
             <button class="btn" type="button" data-testid="ask-stop" @click="stop">{{ t('ask.stop') }}</button>
@@ -494,18 +516,20 @@ watch(mode, () => {
             {{ settingsOpen ? '▾' : '▸' }} {{ t('ask.settings') }}
           </button>
           <div v-if="settingsOpen" class="settings">
-            <label class="field">
-              <span>{{ t('ask.model') }}</span>
-              <select v-model="modelChoice" class="select">
-                <option v-for="m in modelPresets" :key="m.id" :value="m.id">{{ m.label }}</option>
-                <option value="custom">{{ t('ask.modelCustom') }}</option>
-              </select>
-            </label>
-            <input v-if="modelChoice === 'custom'" v-model="settings.aiModel" class="input" type="text" spellcheck="false" :placeholder="t('ask.modelCustomPlaceholder')" />
+            <template v-if="apiKey">
+              <label class="field">
+                <span>{{ t('ask.model') }}</span>
+                <select v-model="modelChoice" class="select">
+                  <option v-for="m in modelPresets" :key="m.id" :value="m.id">{{ m.label }}</option>
+                  <option value="custom">{{ t('ask.modelCustom') }}</option>
+                </select>
+              </label>
+              <input v-if="modelChoice === 'custom'" v-model="settings.aiModel" class="input" type="text" spellcheck="false" :placeholder="t('ask.modelCustomPlaceholder')" />
+            </template>
             <label class="check">
               <input v-model="settings.aiSendDeckNotes" type="checkbox" /> {{ t('ask.sendDeckNotes') }}
             </label>
-            <div class="row between">
+            <div v-if="apiKey" class="row between">
               <code class="key">{{ maskKey(apiKey) }}</code>
               <button class="btn btn-danger" type="button" @click="removeKey">{{ t('ask.keyRemove') }}</button>
             </div>
